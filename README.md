@@ -225,7 +225,7 @@ wieder an. Verbindung, Kamera und Mikrofon laufen dabei im Hintergrund weiter (s
 
 Dafür braucht die App einmal die Freigabe als **Geräteadministrator**. Sie fragt beim ersten Start
 danach, sonst: lange auf die Uhr tippen → *Bildschirm ganz ausschalten*. Genutzt wird davon nur
-„Bildschirm sperren“. Am besten steht die Displaysperre des Tablets auf *Keine* oder *Wischen*.
+„Bildschirm sperren“. Die Displaysperre des Tablets muss auf *Keine* oder *Wischen* stehen. Mit PIN, Muster oder Passwort fragt Android nach dem Aufwachen danach; die Tablet-Einstellungen weisen darauf hin und öffnen die passende Android-Seite.
 **Vor dem Deinstallieren** den Schalter wieder ausmachen, sonst lässt Android die App nicht löschen.
 Ohne Freigabe heißt „aus“ wie bisher: Helligkeit 0 und schwarzer Bildschirm.
 

@@ -1,6 +1,5 @@
 package de.hausgeist.wall
 
-import android.app.KeyguardManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -28,10 +27,7 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         // Wischen-Sperre (ohne PIN) gleich mit entfernen, damit nach dem Aufwachen alles bedienbar ist.
-        val km = getSystemService(KeyguardManager::class.java)
-        if (Build.VERSION.SDK_INT >= 26 && km.isKeyguardLocked && !km.isKeyguardSecure) {
-            km.requestDismissKeyguard(this, null)
-        }
+        Screen.dismissKeyguard(applicationContext)
     }
 
     override fun onDestroy() {

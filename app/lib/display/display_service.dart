@@ -51,9 +51,9 @@ class DisplayService extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Freigabe neu abfragen, z. B. nach der Rückkehr aus dem Android-Dialog.
   Future<void> refreshScreen() async {
-    final before = (screen.supported, screen.admin);
+    final before = (screen.supported, screen.admin, screen.secure);
     if (await screen.refresh()) unawaited(screen.keepAlive());
-    if ((screen.supported, screen.admin) != before) notifyListeners();
+    if ((screen.supported, screen.admin, screen.secure) != before) notifyListeners();
   }
 
   Future<void> start() async {

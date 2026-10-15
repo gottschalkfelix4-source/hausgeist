@@ -12,6 +12,9 @@ class ScreenControl {
   /// Freigabe als Geräteadministrator ist erteilt.
   bool admin = false;
 
+  /// Displaysperre mit PIN, Muster oder Passwort: Nach dem Aufwachen fragt Android danach.
+  bool secure = false;
+
   /// Kamera hat bei ausgeschaltetem Bildschirm Bewegung gesehen.
   VoidCallback? onMotion;
 
@@ -24,6 +27,7 @@ class ScreenControl {
       final m = await _ch.invokeMapMethod<String, Object?>('status');
       supported = m != null;
       admin = m?['admin'] == true;
+      secure = m?['secure'] == true;
     } catch (_) {
       admin = false;
     }
@@ -31,6 +35,9 @@ class ScreenControl {
   }
 
   Future<void> requestAdmin() => _call('requestAdmin');
+
+  /// Android-Einstellungen für die Displaysperre öffnen.
+  Future<void> lockSettings() => _call('lockSettings');
 
   Future<void> removeAdmin() async {
     await _call('removeAdmin');

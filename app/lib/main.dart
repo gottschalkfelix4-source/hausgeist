@@ -123,6 +123,14 @@ class _WallAppState extends State<WallApp> {
                 value: _display.screenAdmin,
                 onChanged: (v) => v ? _display.screen.requestAdmin() : _display.disableScreenOff(),
               ),
+              if (_display.screenAdmin && _display.screen.secure) ...[
+                Text(
+                  'Das Tablet hat eine PIN, ein Muster oder ein Passwort als Displaysperre. Dann fragt Android '
+                  'nach dem Aufwachen danach. Stell die Displaysperre auf „Keine“ oder „Wischen“.',
+                  style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                ),
+                TextButton(onPressed: _display.screen.lockSettings, child: const Text('Displaysperre ändern')),
+              ],
               const SizedBox(height: 12),
             ],
             const Text('Server und Token dieses Tablets ändern:'),
