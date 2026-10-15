@@ -166,3 +166,12 @@ def test_tablets_without_wake_word_are_not_waited_for():
         await _heard(h, a, "a")
         return a
     assert _result(asyncio.run(go())) == [True]
+
+
+def test_websocket_diag_logged(client, room, caplog):
+    caplog.set_level("INFO", logger="hausgeist")
+    with client.websocket_connect("/ws", headers=room["auth"]) as ws:
+        ws.send_json({"type": "diag", "text": "Bildschirm aufgeweckt: Hausgeist sichtbar"})
+        ws.send_json({"type": "wake_heard", "id": "r2", "level": -20})
+        ws.receive_json()
+    assert any("Bildschirm aufgeweckt: Hausgeist sichtbar" in r.getMessage() for r in caplog.records)

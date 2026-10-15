@@ -26,8 +26,14 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        Screen.resumed = true
         // Wischen-Sperre (ohne PIN) gleich mit entfernen, damit nach dem Aufwachen alles bedienbar ist.
         Screen.dismissKeyguard(applicationContext)
+    }
+
+    override fun onPause() {
+        Screen.resumed = false
+        super.onPause()
     }
 
     override fun onDestroy() {

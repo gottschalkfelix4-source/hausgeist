@@ -15,11 +15,18 @@ class ScreenControl {
   /// Displaysperre mit PIN, Muster oder Passwort: Nach dem Aufwachen fragt Android danach.
   bool secure = false;
 
+  /// Hersteller, Modell und Android-Version (für die Fehlersuche).
+  String device = '';
+
+  /// Kurz nach dem Aufwachen: {locked, resumed, interactive} von Android.
+  void Function(Map<Object?, Object?>)? onWakeCheck;
+
   /// Kamera hat bei ausgeschaltetem Bildschirm Bewegung gesehen.
   VoidCallback? onMotion;
 
   void listen() => _ch.setMethodCallHandler((call) async {
         if (call.method == 'motion') onMotion?.call();
+        if (call.method == 'wakeCheck' && call.arguments is Map) onWakeCheck?.call(call.arguments as Map);
       });
 
   Future<bool> refresh() async {
@@ -28,6 +35,7 @@ class ScreenControl {
       supported = m != null;
       admin = m?['admin'] == true;
       secure = m?['secure'] == true;
+      device = (m?['device'] as String?) ?? '';
     } catch (_) {
       admin = false;
     }
@@ -38,6 +46,9 @@ class ScreenControl {
 
   /// Android-Einstellungen für die Displaysperre öffnen.
   Future<void> lockSettings() => _call('lockSettings');
+
+  /// App-Berechtigungen öffnen ("Auf Sperrbildschirm anzeigen" bei Xiaomi & Co.).
+  Future<void> lockPermission() => _call('lockPermission');
 
   Future<void> removeAdmin() async {
     await _call('removeAdmin');

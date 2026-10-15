@@ -60,6 +60,7 @@ class DisplayService extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     screen
       ..onMotion = _onScreenMotion
+      ..onWakeCheck = _onWakeCheck
       ..listen();
     await refreshScreen();
     await WakelockPlus.enable();
@@ -110,6 +111,23 @@ class DisplayService extends ChangeNotifier with WidgetsBindingObserver {
   void _onScreenMotion() {
     ctrl.onActivity();
     _apply();
+  }
+
+  /// Nach dem Aufwachen lag der Sperrbildschirm über der App.
+  bool lockBlocked = false;
+
+  /// Meldung für das Server-Log (Fehlersuche), von main.dart verdrahtet.
+  void Function(String text)? onDiag;
+
+  void _onWakeCheck(Map<Object?, Object?> m) {
+    final blocked = m['locked'] == true && m['resumed'] != true;
+    onDiag?.call('Bildschirm aufgeweckt: ${blocked ? 'Sperrbildschirm liegt über Hausgeist' : 'Hausgeist sichtbar'} '
+        '(locked=${m['locked']}, resumed=${m['resumed']}, an=${m['interactive']}, '
+        'PIN=${screen.secure}, ${screen.device})');
+    if (blocked != lockBlocked) {
+      lockBlocked = blocked;
+      notifyListeners();
+    }
   }
 
   /// Sprachassistent ist aufgegangen.

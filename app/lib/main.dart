@@ -61,6 +61,7 @@ class _WallAppState extends State<WallApp> {
       presence: () => (seen: _display.ctrl.recentlySeen, near: _display.ctrl.someoneNear),
       screenOff: () => _display.screenOff,
     );
+    _display.onDiag = (text) => store.api?.send({'type': 'diag', 'text': text});
     store.start();
     _voice!.start();
     if (!_config.demo) _offerScreenOff();
@@ -131,6 +132,16 @@ class _WallAppState extends State<WallApp> {
                 ),
                 TextButton(onPressed: _display.screen.lockSettings, child: const Text('Displaysperre ändern')),
               ],
+              if (_display.screenAdmin && !_display.screen.secure && _display.lockBlocked) ...[
+                Text(
+                  'Nach dem Aufwachen lag der Sperrbildschirm über Hausgeist. Bei manchen Herstellern (z. B. Xiaomi) '
+                  'muss Hausgeist dafür „Auf Sperrbildschirm anzeigen“ dürfen.',
+                  style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                ),
+                TextButton(onPressed: _display.screen.lockPermission, child: const Text('Berechtigungen öffnen')),
+              ],
+              if (_display.screen.device.isNotEmpty)
+                Text(_display.screen.device, style: Theme.of(ctx).textTheme.bodySmall),
               const SizedBox(height: 12),
             ],
             const Text('Server und Token dieses Tablets ändern:'),

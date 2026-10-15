@@ -1,5 +1,6 @@
 """Verwaltet WebSocket-Verbindungen der Tablets und verteilt Live-Updates raumgefiltert."""
 import asyncio
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -7,6 +8,8 @@ from dataclasses import dataclass, field
 from fastapi import WebSocket
 
 from . import db
+
+log = logging.getLogger("hausgeist")
 
 # Zustaende, bei denen ein Praesenz-/Bewegungsmelder "jemand ist da" meldet
 PRESENT_STATES = {"on", "home", "detected"}
@@ -101,6 +104,12 @@ class Hub:
     async def on_message(self, ws: WebSocket, msg: dict) -> None:
         if msg.get("type") == "wake_heard" and ws in self.clients:
             await self.wake_heard(ws, msg)
+        elif msg.get("type") == "diag" and ws in self.clients:
+            # Meldungen der App zur Fehlersuche, z. B. was nach dem Aufwachen zu sehen ist.
+            row = db.conn().execute("SELECT name FROM tablets WHERE id=?",
+                                    (self.clients[ws].tablet_id,)).fetchone()
+            name = row["name"] if row else self.clients[ws].tablet_id
+            log.info("Tablet %s: %s", name, str(msg.get("text", ""))[:300])
 
     async def wake_heard(self, ws: WebSocket, msg: dict) -> None:
         """Ein Tablet hat das Aktivierungswort gehoert. Alle Tablets, die denselben Ruf melden,
