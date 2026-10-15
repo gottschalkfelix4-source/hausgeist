@@ -52,11 +52,21 @@ class VoiceService extends ChangeNotifier with WidgetsBindingObserver {
   final _command = BytesBuilder(copy: false);
   final _block = <int>[];
   Endpointer? _end;
-  Timer? _close, _demoTimer;
+  Timer? _close, _demoTimer, _watch;
+  DateTime _lastAudio = DateTime.now(), _micSince = DateTime.now(), _listenSince = DateTime.now();
   int _session = 0;
   bool _paused = false, _disposed = false;
 
   void start() {
+    // Signalton und Antwort ohne bzw. nur mit kurzem Audio-Fokus abspielen, damit sie das Mikrofon
+    // nicht anhalten.
+    unawaited(_fx
+        .setAudioContext(AudioContext(android: const AudioContextAndroid(audioFocus: AndroidAudioFocus.none)))
+        .catchError((_) {}));
+    unawaited(_player
+        .setAudioContext(
+            AudioContext(android: const AudioContextAndroid(audioFocus: AndroidAudioFocus.gainTransientMayDuck)))
+        .catchError((_) {}));
     WidgetsBinding.instance.addObserver(this);
     store.addListener(_syncWake);
     _syncWake();
@@ -118,10 +128,42 @@ class VoiceService extends ChangeNotifier with WidgetsBindingObserver {
       sampleRate: sampleRate,
       numChannels: 1,
       echoCancel: true,
+      // Sonst hält der Rekorder an, sobald etwas anderes (auch der eigene Signalton) Audio-Fokus
+      // bekommt, und läuft nicht von selbst weiter.
+      audioInterruption: AudioInterruptionMode.none,
       androidConfig: AndroidRecordConfig(audioSource: AndroidAudioSource.voiceRecognition),
     ));
-    _mic = stream.listen(_onAudio);
+    _micSince = DateTime.now();
+    _watch ??= Timer.periodic(const Duration(seconds: 1), _checkMic);
+    _mic = stream.listen(_onAudio, onError: (Object e) => debugPrint('Mikrofon: $e'));
     return true;
+  }
+
+  /// Wächter: Kommt vom Mikrofon nichts mehr (Anruf, andere App, Treiber), wird es neu gestartet.
+  /// Eine offene Kugel bleibt so nie hängen.
+  void _checkMic(Timer _) {
+    if (_paused || _disposed) return;
+    final now = DateTime.now();
+    if (phase == VoicePhase.listening) {
+      final since = now.difference(_listenSince);
+      if (since > const Duration(seconds: 15)) {
+        unawaited(_endListening(EndReason.maxLength));
+        return;
+      }
+      if (since > const Duration(seconds: 4) && now.difference(_lastAudio) > const Duration(seconds: 3)) {
+        _command.clear();
+        _finish(hint: 'Das Mikrofon liefert keinen Ton. Bitte noch einmal versuchen.');
+      }
+    }
+    final last = _lastAudio.isAfter(_micSince) ? _lastAudio : _micSince;
+    if (_mic != null && _micStarting == null && now.difference(last) > const Duration(seconds: 2)) {
+      debugPrint('Mikrofon liefert nichts, starte neu');
+      _micSince = now;
+      unawaited(_stopMic().then((_) => _ensureMic()).catchError((Object e) {
+        debugPrint('Mikrofon-Neustart: $e');
+        return false;
+      }));
+    }
   }
 
   Future<void> _stopMic() async {
@@ -133,6 +175,7 @@ class VoiceService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _onAudio(Uint8List bytes) {
+    _lastAudio = DateTime.now();
     final s = _pcm.add(bytes);
     if (s.isEmpty) return;
     switch (phase) {
@@ -184,6 +227,7 @@ class VoiceService extends ChangeNotifier with WidgetsBindingObserver {
     _close?.cancel();
     transcript = reply = hint = null;
     phase = VoicePhase.listening;
+    _listenSince = DateTime.now();
     _block.clear();
     _end = Endpointer();
     // Was nach dem Aktivierungswort schon gesagt wurde („Computer, mach das Licht an“), zählt mit.
@@ -326,6 +370,7 @@ class VoiceService extends ChangeNotifier with WidgetsBindingObserver {
     store.removeListener(_syncWake);
     _close?.cancel();
     _demoTimer?.cancel();
+    _watch?.cancel();
     _kws?.stop();
     unawaited(_mic?.cancel());
     _rec.dispose();
