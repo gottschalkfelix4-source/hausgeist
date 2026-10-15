@@ -8,7 +8,7 @@ from .config import settings
 
 log = logging.getLogger("updates")
 
-CACHE_SECONDS = 6 * 3600
+CACHE_SECONDS = 1800  # GitHub erlaubt ohne Anmeldung 60 Anfragen pro Stunde
 _cache: tuple[float, dict | None] = (0.0, None)
 
 
@@ -45,8 +45,8 @@ async def latest() -> dict | None:
             data = _parse(r.json())
     except Exception as e:  # noqa: BLE001
         log.warning("Update-Pruefung fehlgeschlagen: %s", e)
-        data = _cache[1]  # alten Stand behalten, in einer Stunde neu versuchen
-        _cache = (time.monotonic() - CACHE_SECONDS + 3600, data)
+        data = _cache[1]  # alten Stand behalten, in einer halben Stunde neu versuchen
+        _cache = (time.monotonic(), data)
         return data
     _cache = (time.monotonic(), data)
     return data

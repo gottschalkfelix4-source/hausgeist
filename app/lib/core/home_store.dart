@@ -30,7 +30,7 @@ class HomeStore extends ChangeNotifier {
 
   /// Neuere App-Version auf GitHub (`version`, `apk_url`), sonst null.
   Map<String, dynamic>? update;
-  DateTime? _updateChecked;
+  Timer? _updateTimer;
 
   bool get demo => api == null;
   List<Device> get tiles => devices.where((d) => d.kind != DeviceKind.sensor).toList();
@@ -64,7 +64,9 @@ class HomeStore extends ChangeNotifier {
         connected = true;
         error = null;
         notifyListeners();
+        // Bei jeder Verbindung (also auch nach einem Server-Update) und danach stündlich.
         unawaited(_checkUpdate());
+        _updateTimer ??= Timer.periodic(const Duration(hours: 1), (_) => _checkUpdate());
         await done.future;
         // 4000: Server hat Raum/Einstellungen geändert -> sofort neu laden.
         if (api!.closeCode == 4000) continue;
@@ -110,11 +112,9 @@ class HomeStore extends ChangeNotifier {
     }
   }
 
-  /// Höchstens alle 12 Stunden nachsehen, ob es eine neuere App gibt.
+  /// Nachsehen, ob es eine neuere App gibt. Der Server fragt GitHub selbst nur selten.
   Future<void> _checkUpdate() async {
-    final last = _updateChecked;
-    if (last != null && DateTime.now().difference(last) < const Duration(hours: 12)) return;
-    _updateChecked = DateTime.now();
+    if (_disposed || !connected) return;
     try {
       final latest = await api!.appUpdate();
       final version = latest['version'] as String?;
@@ -329,6 +329,7 @@ class HomeStore extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _events?.cancel();
+    _updateTimer?.cancel();
     _wakeResults.close();
     for (final t in _deferTimers.values) {
       t.cancel();
