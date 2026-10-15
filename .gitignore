@@ -1,0 +1,18 @@
+# Geheimnisse und Laufzeitdaten
+.env
+*.db
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Flutter / Android (Rest in app/.gitignore)
+app/android/.kotlin/
+app/android/app/.cxx/
+*.iml
+.idea/
+
+# Lokale Werkzeuge
+.claude/

@@ -1,0 +1,82 @@
+<meta charset="utf-8">
+<title>Smart Home Designvorschläge</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="home.css">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></symbol>
+<symbol id="i-strip" viewBox="0 0 24 24"><rect x="2" y="9" width="20" height="6" rx="3"/><path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01"/></symbol>
+<symbol id="i-ac" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="7" rx="2"/><path d="M7 16c0 2-1 3-1 3M12 16c0 2-1 3-1 3M17 16c0 2-1 3-1 3"/></symbol>
+<symbol id="i-blind" viewBox="0 0 24 24"><path d="M4 4h16M6 8h12M6 12h12M6 16h12M12 16v4"/></symbol>
+<symbol id="i-speaker" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="3"/><circle cx="12" cy="15" r="3"/><circle cx="12" cy="7.5" r=".6"/></symbol>
+<symbol id="i-scene" viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></symbol>
+<symbol id="i-temp" viewBox="0 0 24 24"><path d="M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+<symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 4v16M16 4v16"/></symbol>
+<symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 5l-10 7 10 7zM6 5v14"/></symbol>
+<symbol id="i-next" viewBox="0 0 24 24"><path d="M6 5l10 7-10 7zM18 5v14"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header>
+    <h1>Wandtablet und Web-Admin im Home-Stil</h1>
+    <p class="lead">Klickbarer Prototyp der Richtung „Home Original“. Alle Geräte reagieren wie später in der App, nur ohne echte Anbindung.</p>
+  </header>
+
+  <section aria-labelledby="h-tab">
+    <h2 id="h-tab">Wandtablet, Raum Wohnzimmer</h2>
+    <ul class="hints">
+      <li><b>Über die Kachel wischen</b> · Helligkeit, Temperatur, Rollo</li>
+      <li><b>Kachel antippen</b> · Details mit Farbe, Modus, Lüfter</li>
+      <li><b>Rundes Symbol antippen</b> · Ein oder Aus</li>
+      <li><b>Klima-Regler ziehen</b> · Temperatur direkt</li>
+    </ul>
+    <div class="scroll"><div class="tab-frame"><div class="tablet wall" id="tablet">
+      <div class="t-top">
+        <div><div class="t-room">Wohnzimmer</div><div class="t-sub" id="t-sub"></div>
+          <div class="stats">
+            <div class="stat glass"><svg class="i"><use href="#i-temp"/></svg><div><b>Klima</b><small id="st-clim"></small></div></div>
+            <div class="stat glass"><svg class="i"><use href="#i-bulb"/></svg><div><b>Licht</b><small id="st-light"></small></div></div>
+            <div class="stat glass"><svg class="i"><use href="#i-lock"/></svg><div><b>Sicherheit</b><small id="st-sec"></small></div></div>
+          </div></div>
+        <div class="t-clock" id="clock">19:42<small id="date">Mittwoch, 14. Oktober</small></div>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="say glass" id="say" hidden>Ich habe das Deckenlicht auf 30 Prozent gedimmt.</div>
+      <div class="t-bot"><div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+        <button class="mic glass" id="mic"><svg class="i"><use href="#i-mic"/></svg>Sag etwas oder tippe</button></div>
+      <div class="scrim" id="scrim" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-title"></div></div>
+    </div></div></div>
+    <p class="note">Geräte mit Farbe (Stehlampe, LED-Streifen) zeigen im Detail ein Farbrad und Weißtöne. Die Leselampe kann nur dimmen und zeigt deshalb nur Helligkeit. Die Szene „Filmabend“ schaltet mehrere Geräte gleichzeitig.</p>
+  </section>
+
+  <section aria-labelledby="h-admin">
+    <h2 id="h-admin">Web-Admin, Tablets und Räume</h2>
+    <div class="scroll"><div class="browser"><div class="bchrome"><i></i><i></i><i></i></div>
+      <div class="admin wall">
+        <nav class="side glass"><div class="logo">Zuhause</div><a>Übersicht</a><a class="on">Tablets</a><a>Räume</a><a>Geräte</a><a>Sprache</a><a>Einstellungen</a></nav>
+        <div class="main">
+          <div class="mh"><b>Tablets</b><span class="btn">Tablet hinzufügen</span></div>
+          <div class="cols">
+            <div class="panel glass"><h3>4 Tablets verbunden</h3>
+              <div class="row"><div>Wand Wohnzimmer<small>Lenovo M10 · 82 %</small></div><select id="r1" aria-label="Raum für Wand Wohnzimmer"><option selected>Wohnzimmer</option><option>Küche</option><option>Schlafzimmer</option><option>Flur</option></select><span class="on-dot">Online</span></div>
+              <div class="row"><div>Wand Küche<small>Samsung A9 · 100 %</small></div><select id="r2" aria-label="Raum für Wand Küche"><option>Wohnzimmer</option><option selected>Küche</option><option>Schlafzimmer</option><option>Flur</option></select><span class="on-dot">Online</span></div>
+              <div class="row"><div>Wand Schlafzimmer<small>Lenovo M10 · 47 %</small></div><select id="r3" aria-label="Raum für Wand Schlafzimmer"><option>Wohnzimmer</option><option>Küche</option><option selected>Schlafzimmer</option><option>Flur</option></select><span class="on-dot">Online</span></div>
+              <div class="row"><div>Neues Tablet<small>Kopplungscode 482 913</small></div><select id="r4" aria-label="Raum für neues Tablet"><option selected>Raum wählen</option><option>Wohnzimmer</option><option>Küche</option><option>Schlafzimmer</option><option>Flur</option></select><span class="on-dot off">Neu</span></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+              <div class="panel glass"><h3>Geräte im Wohnzimmer</h3><div style="display:flex;flex-wrap:wrap;gap:8px"><span class="chip act">Klimaanlage</span><span class="chip act">Deckenlicht</span><span class="chip act">Stehlampe</span><span class="chip act">LED-Streifen</span><span class="chip act">Rollo</span><span class="chip">+ Gerät</span></div></div>
+              <div class="panel glass"><h3>Sprachassistent</h3>
+                <div class="kv"><span>Sprache zu Text</span><span>OpenAI</span></div>
+                <div class="kv"><span>Antworten</span><span>Grok</span></div>
+                <div class="kv"><span>Stimme</span><span>ElevenLabs</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div></div></div>
+  </section>
+</div>
+<script src="home.js" charset="utf-8"></script>

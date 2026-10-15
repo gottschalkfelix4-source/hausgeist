@@ -1,0 +1,10 @@
+services:
+  hausgeist:
+    image: ghcr.io/gottschalkfelix4-source/hausgeist:latest
+    # Selbst bauen statt Image ziehen: "docker compose up -d --build"
+    build: ./backend
+    container_name: hausgeist
+    env_file: ./backend/.env
+    ports: ["8080:8080"]
+    volumes: ["./data:/data"]
+    restart: unless-stopped
