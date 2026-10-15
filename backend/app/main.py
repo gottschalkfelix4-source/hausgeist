@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import hmac
 import json
 import logging
 import time
@@ -10,12 +9,12 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from . import __version__, db, updates
-from .config import settings
+from . import __version__, auth, config, db, updates
+from .config import EDITABLE, settings
 from .ha import ha
 from .hub import hub
 from .voice import pipeline, providers
@@ -28,6 +27,8 @@ PAIR_TTL = 15 * 60  # s, so lange gilt ein Kopplungscode
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.conn()
+    config.apply(db.get_settings())
+    await ha.reconfigure()
     task = asyncio.create_task(ha.listen(hub.on_state_changed))
     yield
     task.cancel()
@@ -37,11 +38,27 @@ app = FastAPI(title="Hausgeist", version=__version__, lifespan=lifespan)
 
 
 # ---------- Auth ----------
-def admin(x_admin_key: str = Header("")):
-    if settings.admin_key in ("", "change-me"):
-        raise HTTPException(503, "ADMIN_KEY ist nicht gesetzt (Standardwert change-me ist gesperrt)")
-    if not hmac.compare_digest(x_admin_key, settings.admin_key):
-        raise HTTPException(401, "Admin-Key ungueltig")
+def admin(x_admin_key: str = Header("")) -> str:
+    """Sitzungs-Token aus der Anmeldung oder ADMIN_KEY. Gibt den benutzten Schluessel zurueck."""
+    if not auth.configured():
+        raise HTTPException(503, "Noch nicht eingerichtet: bitte zuerst in /admin ein Passwort festlegen")
+    if not auth.check(x_admin_key):
+        raise HTTPException(401, "Nicht angemeldet oder Anmeldung abgelaufen")
+    return x_admin_key
+
+
+_failures: dict[str, dict[str, deque]] = {"pair": {}, "login": {}}
+
+
+def _throttle(kind: str, request: Request) -> deque:
+    """Hoechstens 10 Fehlversuche je IP in 5 Minuten (Kopplungscodes, Passwort)."""
+    ip = request.client.host if request.client else "?"
+    fails = _failures[kind].setdefault(ip, deque())
+    while fails and fails[0] < time.time() - 300:
+        fails.popleft()
+    if len(fails) >= 10:
+        raise HTTPException(429, "Zu viele Versuche, bitte 5 Minuten warten")
+    return fails
 
 
 def tablet(authorization: str = Header("")):
@@ -66,21 +83,273 @@ def _get(table: str, row_id: str):
 @app.get("/api/status", dependencies=[Depends(admin)])
 async def status():
     """Ueberblick fuer die Admin-Oberflaeche."""
-    def key(v: str) -> bool:
-        return bool(v.strip())
-
-    llm_ok = key(settings.xai_api_key) if settings.llm_provider == "xai" else key(settings.openai_api_key)
-    tts_ok = (key(settings.elevenlabs_api_key) and key(settings.elevenlabs_voice_id)
-              if settings.tts_provider == "elevenlabs" else key(settings.openai_api_key))
     entities = len(await ha.states()) if ha.connected else None
     return {
         "version": __version__,
-        "ha": {"url": settings.ha_url, "connected": ha.connected, "token_set": key(settings.ha_token),
-               "entities": entities},
+        "ha": {"url": settings.ha_url, "connected": ha.connected, "token_set": bool(settings.ha_token.strip()),
+               "entities": entities, "error": None if ha.connected else ha.last_error},
         "voice": {"stt": settings.stt_provider, "llm": settings.llm_provider, "tts": settings.tts_provider,
-                  "stt_ok": key(settings.openai_api_key), "llm_ok": llm_ok, "tts_ok": tts_ok},
+                  "stt_ok": providers.stt_ready(settings), "llm_ok": providers.llm_ready(settings),
+                  "tts_ok": providers.tts_ready(settings)},
         "tablets_online": len(hub.online()),
+        "password_set": auth.has_password(),
     }
+
+
+# ---------- Ersteinrichtung und Anmeldung ----------
+class PasswordIn(BaseModel):
+    password: str = Field(min_length=auth.MIN_PASSWORD, max_length=200)
+
+
+class LoginIn(BaseModel):
+    password: str = Field(max_length=200)
+
+
+class PasswordChange(BaseModel):
+    current: str = Field(max_length=200)
+    new: str = Field(min_length=auth.MIN_PASSWORD, max_length=200)
+
+
+@app.get("/api/setup")
+def setup_state():
+    """Ohne Anmeldung: muss die Verwaltung erst eingerichtet werden?"""
+    return {"needs_setup": not auth.configured(), "version": __version__}
+
+
+@app.post("/api/setup")
+def setup(body: PasswordIn):
+    """Erster Aufruf: Passwort fuer die Verwaltung festlegen. Danach gesperrt."""
+    if auth.configured():
+        raise HTTPException(409, "Hausgeist ist schon eingerichtet")
+    auth.set_password(body.password)
+    return {"token": auth.new_session()}
+
+
+@app.post("/api/admin/login")
+def login(body: LoginIn, request: Request):
+    if not auth.configured():
+        raise HTTPException(503, "Noch nicht eingerichtet")
+    fails = _throttle("login", request)
+    if not auth.check_password(body.password):
+        fails.append(time.time())
+        raise HTTPException(401, "Passwort falsch")
+    return {"token": auth.new_session()}
+
+
+@app.post("/api/admin/logout")
+def logout(key: str = Depends(admin)):
+    auth.end_session(key)
+
+
+@app.put("/api/admin/password")
+def change_password(body: PasswordChange, request: Request, key: str = Depends(admin)):
+    """Neues Passwort; alle anderen Anmeldungen werden beendet."""
+    fails = _throttle("login", request)
+    if not auth.check_password(body.current):
+        fails.append(time.time())
+        raise HTTPException(403, "Das bisherige Passwort stimmt nicht")
+    auth.set_password(body.new)
+    auth.end_other_sessions(key)
+
+
+# ---------- Einstellungen (Admin) ----------
+HTTP_URL = r"^https?://[^\s/]+(:\d+)?(/.*)?$"
+
+
+class SettingsPatch(BaseModel):
+    """Nur mitgeschickte Felder werden geaendert. null = gespeicherten Wert loeschen (Container-Wert gilt)."""
+    model_config = ConfigDict(extra="forbid")
+
+    ha_url: str | None = Field(None, pattern=HTTP_URL, max_length=300)
+    ha_token: str | None = Field(None, max_length=1000)
+    openai_api_key: str | None = Field(None, max_length=500)
+    xai_api_key: str | None = Field(None, max_length=500)
+    elevenlabs_api_key: str | None = Field(None, max_length=500)
+    elevenlabs_voice_id: str | None = Field(None, max_length=100)
+    elevenlabs_model: str | None = Field(None, max_length=100)
+    stt_provider: Literal["openai"] | None = None
+    stt_model: str | None = Field(None, max_length=100)
+    stt_language: str | None = Field(None, pattern=r"^([a-z]{2})?$")
+    llm_provider: Literal["openai", "xai", "custom"] | None = None
+    openai_llm_model: str | None = Field(None, max_length=100)
+    xai_llm_model: str | None = Field(None, max_length=100)
+    custom_llm_url: str | None = Field(None, pattern=r"^$|" + HTTP_URL, max_length=300)
+    custom_llm_api_key: str | None = Field(None, max_length=500)
+    custom_llm_model: str | None = Field(None, max_length=100)
+    tts_provider: Literal["elevenlabs", "openai"] | None = None
+    openai_tts_model: str | None = Field(None, max_length=100)
+    openai_tts_voice: str | None = Field(None, max_length=50)
+    assistant_instructions: str | None = Field(None, max_length=4000)
+    update_repo: str | None = Field(None, pattern=r"^$|^[\w.-]+/[\w.-]+$", max_length=200)
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _strip(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    def changes(self) -> dict[str, str | None]:
+        return {k: getattr(self, k) for k in self.model_fields_set}
+
+
+def _settings_view() -> dict:
+    stored = db.get_settings()
+    out = {}
+    for key, secret in EDITABLE.items():
+        value = getattr(settings, key)
+        out[key] = {"value": None if secret else value, "secret": secret, "set": bool(str(value).strip()),
+                    "source": config.source(key, stored),
+                    "default": None if secret else getattr(config.env_settings, key)}
+    return out
+
+
+@app.get("/api/settings", dependencies=[Depends(admin)])
+def get_settings():
+    """Alle in der Verwaltung aenderbaren Einstellungen. Schluessel werden nie zurueckgegeben."""
+    return _settings_view()
+
+
+@app.put("/api/settings", dependencies=[Depends(admin)])
+async def put_settings(body: SettingsPatch):
+    changes = body.changes()
+    db.put_settings(changes)
+    config.apply(db.get_settings())
+    if {"ha_url", "ha_token"} & changes.keys():
+        await ha.reconfigure()
+    if "update_repo" in changes:
+        updates.clear()
+    return _settings_view()
+
+
+def _preview(body: SettingsPatch) -> config.Settings:
+    """Aktuelle Einstellungen mit ungespeicherten Werten aus dem Formular (null/leer = aktueller Wert)."""
+    return settings.model_copy(update={k: v for k, v in body.changes().items() if v not in (None, "")})
+
+
+def _error(e: Exception) -> str:
+    status = getattr(getattr(e, "response", None), "status_code", None) or getattr(e, "status_code", None)
+    if status in (401, 403):
+        return "Der Schlüssel wird abgelehnt."
+    if status == 404:
+        return "Nicht gefunden (Modell, Stimme oder Adresse prüfen)."
+    if status == 429:
+        return "Zu viele Anfragen oder kein Guthaben mehr."
+    text = str(e).strip() or type(e).__name__
+    return text[:300]
+
+
+@app.post("/api/settings/test/{kind}", dependencies=[Depends(admin)])
+async def test_settings(kind: Literal["ha", "llm", "stt", "tts", "voices"], body: SettingsPatch):
+    """Probiert eine Verbindung mit den Werten aus dem Formular aus, ohne zu speichern."""
+    cfg = _preview(body)
+    try:
+        if kind == "ha":
+            return await ha.probe(cfg.ha_url, cfg.ha_token)
+        if kind == "llm":
+            if not providers.llm_ready(cfg):
+                return {"ok": False, "message": "Schlüssel, Adresse oder Modell fehlt."}
+            client, model = providers.llm_client(cfg)
+            start = time.monotonic()
+            res = await client.chat.completions.create(
+                model=model, max_tokens=20,
+                messages=[{"role": "user", "content": "Antworte nur mit: Hallo, ich bin bereit."}])
+            ms = round((time.monotonic() - start) * 1000)
+            return {"ok": True, "message": f"{model} antwortet in {ms} ms: „{(res.choices[0].message.content or '').strip()}“"}
+        if kind == "stt":
+            if not providers.stt_ready(cfg):
+                return {"ok": False, "message": "Es fehlt der OpenAI-Schlüssel."}
+            client = providers.AsyncOpenAI(api_key=cfg.openai_api_key)
+            await client.models.retrieve(cfg.stt_model)
+            return {"ok": True, "message": f"Schlüssel gültig, Modell {cfg.stt_model} verfügbar."}
+        if kind == "voices":
+            if not cfg.elevenlabs_api_key.strip():
+                return {"ok": False, "message": "Es fehlt der ElevenLabs-Schlüssel.", "voices": []}
+            voices = await providers.elevenlabs_voices(cfg)
+            return {"ok": True, "message": f"{len(voices)} Stimmen gefunden.", "voices": voices}
+        if not providers.tts_ready(cfg):
+            return {"ok": False, "message": "Schlüssel oder Stimme fehlt."}
+        audio, mime = await providers.synthesize("Hallo, ich bin Hausgeist. So klinge ich.", cfg)
+        return {"ok": True, "message": "Stimme funktioniert.", "audio_base64": base64.b64encode(audio).decode(),
+                "mime": mime}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "message": _error(e)}
+
+
+class VoiceTest(BaseModel):
+    text: str = Field(min_length=1, max_length=1000)
+    room_id: str | None = None
+    speak: bool = True
+
+
+@app.post("/api/voice/test", dependencies=[Depends(admin)])
+async def voice_test(body: VoiceTest):
+    """Sprachassistent aus der Verwaltung ausprobieren, als stuende man im gewaehlten Raum."""
+    if body.room_id:
+        _get("rooms", body.room_id)
+    try:
+        result = await pipeline.run(body.text, body.room_id, f"admin:{body.room_id}")
+        if body.speak and providers.tts_ready(settings):
+            audio, mime = await providers.synthesize(result["reply"])
+            result |= {"audio_base64": base64.b64encode(audio).decode(), "mime": mime}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"Sprachdienst: {_error(e)}") from e
+    return result
+
+
+# ---------- Sicherung (Admin) ----------
+BACKUP_COLUMNS = {
+    "rooms": ["id", "name", "icon", "presence_entity", "ha_area_id"],
+    "room_entities": ["room_id", "entity_id"],
+    "tablets": ["id", "name", "room_id", "token", "display"],
+}
+
+
+class Backup(BaseModel):
+    format: Literal["hausgeist-backup"]
+    settings: dict[str, str] = {}
+    rooms: list[dict] = []
+    room_entities: list[dict] = []
+    tablets: list[dict] = []
+
+
+@app.get("/api/backup", dependencies=[Depends(admin)])
+def export_backup():
+    """Raeume, Tablets (mit Tokens) und Einstellungen (mit Schluesseln) als JSON. Ohne Passwort."""
+    c = db.conn()
+    data = {"format": "hausgeist-backup", "version": __version__, "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "settings": db.get_settings()}
+    for table, cols in BACKUP_COLUMNS.items():
+        data[table] = [dict(r) for r in c.execute(f"SELECT {', '.join(cols)} FROM {table}")]
+    name = f"hausgeist-sicherung-{time.strftime('%Y-%m-%d')}.json"
+    return JSONResponse(data, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@app.post("/api/backup", dependencies=[Depends(admin)])
+async def import_backup(body: Backup):
+    """Ersetzt Raeume, Tablets und gespeicherte Einstellungen durch die Sicherung."""
+    try:
+        values = SettingsPatch(**{k: v for k, v in body.settings.items() if k in EDITABLE}).changes()
+    except ValueError as e:
+        raise HTTPException(422, f"Ungueltige Einstellung in der Sicherung: {e}") from e
+    c = db.conn()
+    try:
+        c.execute("DELETE FROM tablets")
+        c.execute("DELETE FROM rooms")
+        c.execute("DELETE FROM settings WHERE substr(key, 1, 1) != '_'")
+        for table, cols in BACKUP_COLUMNS.items():
+            for row in getattr(body, table):
+                if not all(row.get(k) is not None for k in cols[:2]):
+                    raise ValueError(f"{table}: Eintrag ohne {cols[0]}/{cols[1]}")
+                c.execute(f"INSERT OR IGNORE INTO {table}({', '.join(cols)}) VALUES({', '.join('?' * len(cols))})",
+                          [row.get(k) if k != "display" else (row.get(k) or "{}") for k in cols])
+        c.executemany("INSERT INTO settings(key, value) VALUES(?, ?)", [(k, v) for k, v in values.items() if v is not None])
+        c.commit()
+    except (ValueError, db.sqlite3.Error) as e:
+        c.rollback()
+        raise HTTPException(422, f"Sicherung ist unvollstaendig: {e}") from e
+    config.apply(db.get_settings())
+    await ha.reconfigure()
+    await hub.reload_all()
+    return {"rooms": len(body.rooms), "tablets": len(body.tablets)}
 
 
 # ---------- Raeume (Admin) ----------
@@ -330,18 +599,10 @@ class PairIn(BaseModel):
     code: str
 
 
-_pair_failures: dict[str, deque] = {}
-
-
 @app.post("/api/pair")
 def pair(body: PairIn, request: Request):
     """Tablet tauscht den 6-stelligen Code aus der Admin-Oberflaeche gegen seinen Token."""
-    ip = request.client.host if request.client else "?"
-    fails = _pair_failures.setdefault(ip, deque())
-    while fails and fails[0] < time.time() - 300:
-        fails.popleft()
-    if len(fails) >= 10:
-        raise HTTPException(429, "Zu viele Versuche, bitte 5 Minuten warten")
+    fails = _throttle("pair", request)
     code = "".join(ch for ch in body.code if ch.isdigit())
     row = db.conn().execute("SELECT * FROM tablets WHERE pair_code=? AND pair_expires>?",
                             (code, time.time())).fetchone() if len(code) == 6 else None
@@ -438,4 +699,13 @@ def root():
     return RedirectResponse("/admin/")
 
 
-app.mount("/admin", StaticFiles(directory=Path(__file__).parent / "admin", html=True), name="admin")
+class AdminFiles(StaticFiles):
+    """Immer per ETag nachfragen, sonst laeuft nach einem Update noch die alte Verwaltung im Browser."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/admin", AdminFiles(directory=Path(__file__).parent / "admin", html=True), name="admin")

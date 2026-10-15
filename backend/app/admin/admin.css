@@ -18,7 +18,7 @@
 [hidden]{display:none!important}
 html,body{margin:0;min-height:100%}
 body{background:#2a3550;background-image:var(--wall);background-attachment:fixed;color:var(--text);font-family:var(--font);font-size:15px;line-height:1.45}
-button,input,select{font:inherit;color:inherit}
+button,input,select,textarea{font:inherit;color:inherit}
 a{color:inherit}
 code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;background:#0000002e;padding:1px 5px;border-radius:6px}
 h1{font-size:26px;margin:0;font-weight:700;letter-spacing:-.01em}
@@ -86,9 +86,11 @@ a.card:hover{background:var(--glass-hi)}
 .field{display:flex;flex-direction:column;gap:6px;font-size:14px}
 .field>span{color:var(--muted)}
 .field small{color:var(--faint);font-size:12px}
-input[type=text],input[type=password],input[type=number],input[type=search],select{
+input[type=text],input[type=password],input[type=number],input[type=search],input[type=url],select,textarea{
   background:var(--field);border:1px solid transparent;border-radius:12px;padding:10px 12px;width:100%;min-width:0}
-input:focus,select:focus{border-color:#ffffff59;outline:none}
+textarea{resize:vertical;min-height:90px;line-height:1.45}
+input:focus,select:focus,textarea:focus{border-color:#ffffff59;outline:none}
+::placeholder{color:var(--faint)}
 select option{color:#000}
 .check{display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer}
 .check input{width:18px;height:18px;accent-color:var(--acc);flex:none}
@@ -135,6 +137,33 @@ dialog .actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;mar
 details summary{cursor:pointer;color:var(--muted);font-size:14px}
 .steps{margin:0;padding-left:20px;color:var(--muted);font-size:14px;display:flex;flex-direction:column;gap:4px}
 .steps b{color:var(--text);font-weight:500}
+
+/* Einstellungen */
+.tabs{display:flex;gap:4px;padding:4px;border-radius:999px;background:var(--panel);align-self:flex-start;max-width:100%;overflow-x:auto}
+.tabs a{text-decoration:none;color:var(--muted);padding:7px 16px;border-radius:999px;white-space:nowrap;font-size:14px}
+.tabs a:hover{color:var(--text)}
+.tabs a.on{background:var(--glass-hi);color:var(--text);font-weight:500}
+.field .origin{color:var(--faint)}
+.field .origin .link{font-size:12px}
+.test-result{margin:0;font-size:14px;padding:10px 12px;border-radius:12px;background:#0000002e;color:var(--muted)}
+.test-result.ok{color:#c9f5d4}
+.test-result.bad{color:#ffc2bb}
+.test-result.ok:before,.test-result.bad:before{display:inline-block;width:1.3em;font-weight:700}
+.test-result.ok:before{content:"✓"}
+.test-result.bad:before{content:"!"}
+.reply{font-size:18px;margin:0 0 4px}
+label.btn{cursor:pointer}
+form.stack .savebar,section .savebar{margin-top:0}
+
+/* Einrichtungs-Assistent */
+.stepper{list-style:none;margin:0;padding:0;display:flex;gap:8px;flex-wrap:wrap}
+.stepper a{display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--muted);padding:6px 14px 6px 6px;border-radius:999px;background:var(--panel);font-size:14px}
+.stepper span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--field);font-size:12px;font-weight:600}
+.stepper .on a{color:var(--text);background:var(--glass-hi)}
+.stepper .on span{background:var(--acc);color:var(--ink)}
+.stepper .done span{background:var(--ok);color:var(--ink)}
+.wizard{max-width:680px}
+.wizard-nav{align-items:center;margin-top:6px}
 
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#fff;color:var(--ink);padding:10px 18px;border-radius:999px;font-size:14px;box-shadow:0 8px 30px #0005;z-index:20;max-width:calc(100vw - 32px)}
 .toast.bad{background:#ffd6d2}

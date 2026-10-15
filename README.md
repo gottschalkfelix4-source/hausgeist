@@ -42,12 +42,12 @@ Das Display bleibt immer bereit. Es wird hell, sobald jemand davor steht, und du
 | | |
 |---|---|
 | 🏠 **Ein Tablet, ein Raum** | Jedes Tablet gehört zu einem Raum. Es sieht und steuert nur die Geräte dieses Raums. Mehrere Tablets pro Raum sind kein Problem. |
-| 🖥️ **Web-Verwaltung** | Räume, Geräte, Präsenzmelder, Tablets und Display-Verhalten im Browser einstellen. Räume lassen sich mit einem Klick aus den Home-Assistant-Bereichen übernehmen. |
+| 🖥️ **Web-Verwaltung** | Alles im Browser: Ein Assistent führt durch die Ersteinrichtung. Home Assistant, API-Schlüssel, Modelle und Stimmen einstellen und direkt testen. Räume, Geräte, Präsenzmelder, Tablets und Display-Verhalten verwalten. Sicherung als Datei. |
 | 🔢 **Koppeln per Code** | Tablet anlegen, 6-stelligen Code in der App eintippen, fertig. Kein Token abtippen. |
 | 💡 **Licht** | Ein/aus, Helligkeit per Wischen über die Kachel, Farbrad, Weißtöne in Kelvin, Favoriten. |
 | ❄️ **Klima** | Drehregler für die Zieltemperatur, Modi (Kühlen, Heizen, Automatik, Entfeuchten, Lüften), Lüfterstufe, Lamellen, Eco. |
 | 🪟 **Rollos, Musik, Szenen, Schlösser** | Position, Lautstärke und Titel, Szenen per Tipp, Türschloss. |
-| 🗣️ **Sprachassistent** | Mikro halten und sprechen oder antippen und schreiben. Spracherkennung mit OpenAI, Sprachmodell OpenAI oder Grok (xAI), Antwortstimme mit ElevenLabs oder OpenAI. Er merkt sich die letzten Sätze, „und jetzt etwas dunkler“ funktioniert also. |
+| 🗣️ **Sprachassistent** | Mikro halten und sprechen oder antippen und schreiben. Spracherkennung mit OpenAI, Sprachmodell OpenAI, Grok (xAI) oder ein eigenes wie Ollama, Antwortstimme mit ElevenLabs oder OpenAI. Er merkt sich die letzten Sätze, „und jetzt etwas dunkler“ funktioniert also. |
 | 👋 **Wird hell bei Annäherung** | Die Frontkamera erkennt, wenn jemand vor das Tablet tritt. Antippen ist nicht nötig. Wer hinten im Raum vorbeigeht, weckt es nicht. |
 | 🌙 **Blendet nicht** | Die Helligkeit folgt dem Raumlicht. Nachts gibt es eine Obergrenze und ein dunkles Design. |
 | 🔁 **Live** | Änderungen aus Home Assistant erscheinen sofort, nach einem Verbindungsabbruch verbindet sich die App selbst neu. |
@@ -91,7 +91,7 @@ Du brauchst:
 - Home Assistant mit einem **Long-Lived Access Token** (in Home Assistant: Profil → Sicherheit → *Langlebige Zugriffstoken*)
 - einen Docker-Host, zum Beispiel Unraid
 - ein oder mehrere Android-Tablets (Android 7 oder neuer, Frontkamera empfohlen)
-- für Sprache: einen OpenAI-API-Key, optional xAI- oder ElevenLabs-Keys
+- für Sprache: einen OpenAI-API-Key, optional xAI- oder ElevenLabs-Keys oder ein eigenes Sprachmodell (Ollama, LM Studio)
 
 ### 1. Server auf Unraid
 
@@ -102,33 +102,42 @@ Du brauchst:
    wget -O /boot/config/plugins/dockerMan/templates-user/my-hausgeist.xml https://raw.githubusercontent.com/gottschalkfelix4-source/hausgeist/main/unraid/hausgeist.xml
    ```
 2. **Docker → Add Container** → bei *Template* „Hausgeist“ auswählen.
-3. Ausfüllen:
-   - **Home Assistant URL**, z. B. `http://192.168.1.10:8123`
-   - **Home Assistant Token**
-   - **Admin-Key**: ein selbst gewähltes, langes Passwort
-   - **OpenAI API-Key** und die Sprach-Provider (optional)
-4. **Apply**. Die Verwaltung öffnest du über das Container-Icon → **WebUI** oder unter `http://<unraid-ip>:8080/admin/`.
+3. **Apply**. Ausfüllen musst du nichts: Home Assistant, Schlüssel und Sprachdienste stellst du danach in
+   der Verwaltung ein. Wer will, kann sie unter *Show more settings* auch hier eintragen.
+4. Die Verwaltung öffnest du über das Container-Icon → **WebUI** oder unter `http://<unraid-ip>:8080/admin/`.
 
 **Mit Docker Compose (jeder Docker-Host):**
 
 ```bash
 git clone https://github.com/gottschalkfelix4-source/hausgeist.git
 cd hausgeist
-cp backend/.env.example backend/.env   # Werte eintragen
+cp backend/.env.example backend/.env   # optional, alles geht auch in der Verwaltung
 docker compose up -d
 ```
 
 Das Image `ghcr.io/gottschalkfelix4-source/hausgeist` gibt es für `amd64` und `arm64`.
 
-### 2. Räume und Tablets anlegen
+### 2. Einrichten im Browser
 
-Öffne `http://<server>:8080/admin/` und melde dich mit dem **Admin-Key** an.
+Öffne `http://<server>:8080/admin/`. Beim ersten Aufruf legst du ein **Passwort für die Verwaltung** fest.
+Mach das gleich nach dem Start, denn bis dahin kann es jeder im Heimnetz tun.
 
-1. **Räume → Aus Home Assistant übernehmen.** Hausgeist legt für jeden Bereich (Area) aus Home Assistant
-   einen Raum an und ordnet die Geräte zu. Gibt es im Bereich genau einen Präsenzmelder, wird er
-   automatisch eingetragen. Du kannst auch einzelne Bereiche wählen oder Räume von Hand anlegen.
-2. **Raum öffnen**, um Geräte an- oder abzuwählen, ihn umzubenennen oder den Präsenzmelder zu ändern.
-3. **Tablets → Tablet hinzufügen**: Name und Raum wählen. Es erscheint ein **Kopplungscode**, der 15 Minuten gilt.
+Danach führt ein Assistent in vier Schritten durch die Einrichtung. Jeden Schritt kannst du überspringen
+und später unter **Einstellungen** oder über die Checkliste in der **Übersicht** nachholen.
+
+1. **Home Assistant:** Adresse und Token eintragen, **Verbindung testen**, speichern.
+2. **Sprachassistent:** Sprachmodell (OpenAI, Grok oder ein eigenes), Stimme (ElevenLabs oder OpenAI) und
+   die nötigen API-Schlüssel. Beim Speichern prüft Hausgeist, ob das Sprachmodell antwortet.
+3. **Räume:** Mit **Aus Home Assistant übernehmen** legt Hausgeist für jeden Bereich (Area) einen Raum an
+   und ordnet die Geräte zu. Gibt es im Bereich genau einen Präsenzmelder, wird er automatisch eingetragen.
+   Räume lassen sich auch von Hand anlegen.
+4. **Tablet:** Name und Raum wählen. Es erscheint ein **Kopplungscode**, der 15 Minuten gilt.
+
+<p align="center">
+  <img src="docs/screenshots/12-assistent.png" alt="Einrichtungsassistent" width="100%">
+</p>
+
+Geräte eines Raums änderst du später unter **Räume**: Raum öffnen, Geräte an- oder abwählen, Präsenzmelder ändern.
 
 <p align="center">
   <img src="docs/screenshots/09-raum-geraete.png" alt="Geräte eines Raums in der Verwaltung" width="49%">
@@ -179,12 +188,29 @@ die APK im Browser, danach die Datei öffnen und installieren. Kopplung und Eins
 
 | Bereich | Was du dort machst |
 |---|---|
-| **Übersicht** | Verbindung zu Home Assistant, Status der Sprach-Provider, welche Tablets online sind. Eine Checkliste führt durch die Ersteinrichtung. |
+| **Übersicht** | Verbindung zu Home Assistant, Status der Sprachdienste, welche Tablets online sind. Eine Checkliste zeigt, was bei der Einrichtung noch fehlt. |
 | **Räume** | Bereiche aus Home Assistant übernehmen, Räume anlegen, umbenennen, löschen. Geräte per Suche und Häkchen zuordnen. Präsenzmelder wählen. |
 | **Tablets** | Tablets anlegen und einem Raum zuweisen, auch mehrere pro Raum. Kopplungscode erzeugen, Token erneuern, Tablet entfernen. Display-Verhalten pro Tablet einstellen. |
+| **Einstellungen → Home Assistant** | Adresse und Token ändern und testen. Hausgeist verbindet sich nach dem Speichern sofort neu, ohne Neustart. |
+| **Einstellungen → Sprachassistent** | Sprachmodell, Stimme, Spracherkennung, API-Schlüssel und eigene Anweisungen an den Assistenten. Jeder Dienst hat einen **Testen**-Knopf, ElevenLabs-Stimmen lassen sich aus deinem Konto auswählen und probehören. Unter **Ausprobieren** schickst du einen Befehl wie vom Tablet eines Raums. |
+| **Einstellungen → System** | Update-Quelle, Sicherung herunterladen und wiederherstellen, Passwort ändern. |
 
-Die Verwaltung funktioniert auch auf dem Handy. Der Admin-Key bleibt nur in diesem Browser-Tab gespeichert,
-außer du setzt das Häkchen bei **Angemeldet bleiben**.
+<p align="center">
+  <img src="docs/screenshots/13-einstellungen-sprache.png" alt="Sprach-Einstellungen in der Verwaltung" width="100%">
+</p>
+
+Die Verwaltung funktioniert auch auf dem Handy. Die Anmeldung bleibt nur in diesem Browser-Tab bestehen,
+außer du setzt das Häkchen bei **Angemeldet bleiben**. Dann gilt sie 30 Tage ab der letzten Nutzung.
+
+**API-Schlüssel** zeigt die Verwaltung nie wieder an, nur ob einer gesetzt ist. Zum Ändern einfach den neuen eintragen.
+
+**Sicherung:** Unter *Einstellungen → System* lädst du eine JSON-Datei mit Räumen, Tablets und allen
+Einstellungen herunter. Sie enthält **API-Schlüssel und Tablet-Tokens im Klartext**, also sicher aufbewahren.
+Beim Wiederherstellen werden Räume, Tablets und Einstellungen ersetzt, die Tablets verbinden sich danach von selbst neu.
+Das Passwort der Verwaltung ist nicht in der Sicherung.
+
+**Passwort vergessen?** `ADMIN_KEY` im Container auf einen langen Wert setzen, neu starten, damit anmelden und
+unter *Einstellungen → System* ein neues Passwort festlegen. Danach `ADMIN_KEY` wieder leeren.
 
 ## Display-Verhalten
 
@@ -222,25 +248,40 @@ Das Sprachmodell bekommt nur die Geräte des Tablet-Raums mit ihrem aktuellen Zu
 Es kann auch Farben und Weißtöne setzen. Pro Tablet merkt es sich die letzten Sätze für zwei Minuten.
 Beispiele: *„Mach das Licht gemütlich“*, *„Stell die Klima auf 21 Grad“*, *„Rollo halb runter“*, danach *„noch ein bisschen weiter“*.
 
-Ob die Schlüssel der Provider gesetzt sind, zeigt die Übersicht in der Verwaltung.
+Anbieter, Modelle und Stimme stellst du in der Verwaltung unter *Einstellungen → Sprachassistent* ein:
+
+| | Anbieter | Einstellbar |
+|---|---|---|
+| **Spracherkennung** | OpenAI | Modell (`gpt-4o-mini-transcribe`, `whisper-1`, …), Sprache |
+| **Sprachmodell** | OpenAI, xAI (Grok) oder **eigenes** | Modell. Eigenes = jeder OpenAI-kompatible Server, z. B. Ollama (`http://<ip>:11434/v1`) oder LM Studio. Das Modell muss Tool-Calling können, etwa `llama3.1` oder `qwen2.5`. |
+| **Stimme** | ElevenLabs oder OpenAI | ElevenLabs: Stimme aus deinem Konto, Modell. OpenAI: Modell, Stimme (`alloy`, `nova`, …) |
+
+Unter **Persönlichkeit** kannst du dem Assistenten zusätzliche Anweisungen geben, etwa *„Duze mich und antworte
+in einem Satz.“* Die Regeln zur Gerätesteuerung bleiben davon unberührt.
 
 ## Konfiguration
 
-Alle Einstellungen des Servers sind Umgebungsvariablen (Unraid-Template oder `backend/.env`):
+Normalerweise stellst du alles in der Verwaltung ein. Jede Einstellung gibt es aber auch als
+Umgebungsvariable (Unraid-Template oder `backend/.env`). **Was in der Verwaltung gespeichert ist, gilt vor
+der Variable.** Neben jedem Feld steht, woher der aktuelle Wert kommt. Mit **Zurücksetzen** gilt wieder die Variable.
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
 | `HA_URL` | `http://homeassistant.local:8123` | Adresse von Home Assistant |
 | `HA_TOKEN` | – | Long-Lived Access Token |
-| `ADMIN_KEY` | – | Passwort für die Verwaltung. Leer oder `change-me` sperrt die Admin-API. |
+| `ADMIN_KEY` | – | Notfall-Zugang zur Verwaltung, zusätzlich zum Passwort. Auch für Skripte (`x-admin-key`). |
 | `OPENAI_API_KEY` | – | OpenAI (STT, optional LLM und TTS) |
 | `XAI_API_KEY` | – | xAI / Grok |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | – | ElevenLabs-Stimme |
-| `STT_PROVIDER` | `openai` | Spracherkennung |
-| `LLM_PROVIDER` | `openai` | `openai` oder `xai` |
-| `TTS_PROVIDER` | `elevenlabs` | `elevenlabs` oder `openai` |
+| `ELEVENLABS_MODEL` | `eleven_multilingual_v2` | ElevenLabs-Modell |
+| `STT_PROVIDER`, `STT_MODEL`, `STT_LANGUAGE` | `openai`, `gpt-4o-mini-transcribe`, `de` | Spracherkennung |
+| `LLM_PROVIDER` | `openai` | `openai`, `xai` oder `custom` |
 | `OPENAI_LLM_MODEL` | `gpt-4o-mini` | Modell für `openai` |
 | `XAI_LLM_MODEL` | `grok-3-mini` | Modell für `xai` |
+| `CUSTOM_LLM_URL`, `CUSTOM_LLM_API_KEY`, `CUSTOM_LLM_MODEL` | – | Eigenes OpenAI-kompatibles Sprachmodell |
+| `TTS_PROVIDER` | `elevenlabs` | `elevenlabs` oder `openai` |
+| `OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE` | `gpt-4o-mini-tts`, `alloy` | Stimme für `openai` |
+| `ASSISTANT_INSTRUCTIONS` | – | Zusätzliche Anweisungen an den Assistenten |
 | `DB_PATH` | `/data/hausgeist.db` | SQLite-Datenbank |
 | `UPDATE_REPO` | `gottschalkfelix4-source/hausgeist` | GitHub-Repo für den Update-Hinweis der App. Leer schaltet ihn ab. |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | IP des Reverse Proxys, dem Hausgeist `X-Forwarded-For` glaubt |
@@ -254,20 +295,30 @@ Reverse Proxy mit HTTPS davorsetzen, zum Beispiel **Nginx Proxy Manager** (gibt 
 2. **Websockets Support** einschalten. Ohne ihn kommen keine Live-Updates an.
 3. Unter *SSL* ein Let's-Encrypt-Zertifikat anfordern und *Force SSL* aktivieren.
 4. Im Container `FORWARDED_ALLOW_IPS` auf die IP des Proxys setzen. So zählt die Sperre gegen das
-   Durchprobieren von Kopplungscodes (10 Fehlversuche in 5 Minuten) pro echtem Gerät.
+   Durchprobieren von Kopplungscodes und Passwörtern (10 Fehlversuche in 5 Minuten) pro echtem Gerät.
 5. In der App als Server `https://deine-domain` eintragen.
 
 Sicherheit im Überblick:
 - Tablets melden sich mit einem eigenen Token an. Er geht im `Authorization`-Header mit, auch beim
   WebSocket, und landet so nicht in Proxy-Logs.
 - Kopplungscodes gelten 15 Minuten und nur einmal.
-- Die Verwaltung ist mit dem Admin-Key geschützt. Solange er leer oder `change-me` ist, ist sie gesperrt.
+- Die Verwaltung ist mit einem Passwort geschützt, das beim ersten Aufruf festgelegt wird. Gespeichert wird nur
+  ein scrypt-Hash, Anmeldungen laufen über Sitzungs-Tokens, die beim Abmelden oder Passwortwechsel enden.
 - Ein verlorenes Tablet entfernst du in der Verwaltung oder klickst dort **Token erneuern**.
 
 ## API
 
+`x-admin-key` ist entweder das Sitzungs-Token aus `/api/admin/login` oder der `ADMIN_KEY`.
+
 | Endpoint | Auth | Zweck |
 |---|---|---|
+| `GET/POST /api/setup` | – | Ist schon eingerichtet? Passwort beim ersten Start festlegen (danach 409) |
+| `POST /api/admin/login`, `/api/admin/logout` | Passwort / `x-admin-key` | Anmelden, abmelden |
+| `PUT /api/admin/password` | `x-admin-key` | Passwort ändern, beendet andere Sitzungen |
+| `GET/PUT /api/settings` | `x-admin-key` | Einstellungen lesen (Schlüssel nur als „gesetzt“) und speichern, `null` setzt zurück |
+| `POST /api/settings/test/{ha,llm,stt,tts,voices}` | `x-admin-key` | Dienst mit noch nicht gespeicherten Werten testen, ElevenLabs-Stimmen laden |
+| `POST /api/voice/test` | `x-admin-key` | Sprachbefehl wie von einem Tablet im Raum |
+| `GET/POST /api/backup` | `x-admin-key` | Sicherung herunterladen, wiederherstellen |
 | `GET /api/status` | `x-admin-key` | Version, Home Assistant, Sprach-Provider, Tablets online |
 | `GET/POST /api/rooms`, `PATCH/DELETE /api/rooms/{id}` | `x-admin-key` | Räume |
 | `PUT /api/rooms/{id}/entities`, `PUT /api/rooms/{id}/presence` | `x-admin-key` | Geräte und Präsenzmelder eines Raums |
@@ -300,9 +351,9 @@ docs/      Architektur, Logo, Screenshots
 cd backend
 python -m venv .venv && .venv/Scripts/activate   # Linux/macOS: source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env
+cp .env.example .env               # optional
 DB_PATH=./hausgeist.db uvicorn app.main:app --reload --port 8080
-python -m pytest                     # API, Kopplung, Raum-Grenzen, Sprach-Werkzeuge, HA-Bereiche
+python -m pytest                     # API, Kopplung, Raum-Grenzen, Sprach-Werkzeuge, Einstellungen, Sicherung
 ```
 
 Die Verwaltung (`backend/app/admin/`) ist reines HTML, CSS und JavaScript ohne Build-Schritt.
@@ -339,6 +390,7 @@ Den Schlüssel bekommt sie aus den Secrets `HAUSGEIST_KEYSTORE_BASE64` und `HAUS
 - [x] Tablet-App mit Apple-Home-Design, Detailfenstern und Display-Logik
 - [x] Unraid-Template und Docker-Image
 - [x] Web-Oberfläche zur Verwaltung (Räume, Tablets, Präsenzmelder, Display-Einstellungen)
+- [x] Einrichtung und alle Einstellungen im Browser, Einrichtungsassistent, Sicherung
 - [x] Bereiche aus Home Assistant automatisch als Räume übernehmen
 - [x] Koppeln per Code, signierte Releases, Update-Hinweis in der App
 - [x] Gesprächsgedächtnis für den Sprachassistenten

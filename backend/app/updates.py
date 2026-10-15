@@ -24,6 +24,12 @@ def _parse(release: dict) -> dict | None:
     }
 
 
+def clear() -> None:
+    """Update-Quelle geaendert: beim naechsten Aufruf neu fragen."""
+    global _cache
+    _cache = (0.0, None)
+
+
 async def latest() -> dict | None:
     global _cache
     if not settings.update_repo:

@@ -3,6 +3,7 @@ import json
 import time
 
 from .. import db
+from ..config import settings
 from ..ha import ACTION_SERVICES, ha
 from .providers import llm_client
 
@@ -80,6 +81,8 @@ async def run(text: str, room_id: str | None, session: str | None = None) -> dic
         "in ein bis zwei Saetzen, ohne Markdown. Steuere Geraete ausschliesslich ueber das Tool "
         f"und nur diese, die zum Raum '{room['name'] if room else '-'}' gehoeren:\n{context}"
     )
+    if settings.assistant_instructions.strip():
+        system += "\n\nZusaetzliche Anweisungen des Hausherrn:\n" + settings.assistant_instructions.strip()
     client, model = llm_client()
     messages = [{"role": "system", "content": system}, *_recall(session), {"role": "user", "content": text}]
     actions: list[dict] = []

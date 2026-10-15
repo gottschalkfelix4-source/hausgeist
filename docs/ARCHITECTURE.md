@@ -22,7 +22,8 @@ Geräte (Zigbee, Hue, Klima, ...) -> Home Assistant (Unraid)
   dem Cache, ohne REST-Aufruf. Bricht die Verbindung ab, wird alle 5 s neu verbunden, bis dahin gilt REST.
 - **Sofort übernehmen**: Ändert die Verwaltung Raum, Geräte oder Display-Einstellungen, schließt der
   Server die betroffenen Tablet-WebSockets mit Code `4000`. Die App lädt dann sofort neu.
-- **Sprache**: Provider per `.env` wählbar. LLM: OpenAI oder xAI/Grok (gleiches Protokoll),
+- **Sprache**: Provider in der Verwaltung wählbar. LLM: OpenAI, xAI/Grok oder ein eigener
+  OpenAI-kompatibler Server wie Ollama (alle mit demselben Client, nur `base_url` unterscheidet sich),
   TTS: ElevenLabs oder OpenAI, STT: OpenAI. Der Assistent darf nur Geräte des Tablet-Raums steuern.
   Er bekommt deren Zustand samt Helligkeit, Temperaturen und Modi und merkt sich pro Tablet die
   letzten 6 Nachrichten für 120 s (`pipeline.HISTORY_*`).
@@ -95,9 +96,38 @@ Overlay. Echtes Abschalten würde die Kamera stoppen. Die Logik steckt in
 
 ## Web-Verwaltung (`backend/app/admin/`)
 Reines HTML, CSS und JavaScript ohne Build-Schritt und ohne CDN. FastAPI liefert sie unter `/admin/`
-aus, `/` leitet dorthin weiter. Sie spricht mit der Admin-API und schickt den Admin-Key im Header
-`x-admin-key`. Gespeichert wird er in `sessionStorage`, bei „Angemeldet bleiben“ in `localStorage`.
-Routen: `#/uebersicht`, `#/raeume`, `#/raeume/<id>`, `#/tablets`, `#/tablets/<id>`.
+aus, `/` leitet dorthin weiter. Routen: `#/uebersicht`, `#/raeume[/<id>]`, `#/tablets[/<id>]`,
+`#/einstellungen/{homeassistant,sprache,system}`, `#/einrichtung/<1-4>` (Assistent).
+
+**Anmeldung** (`backend/app/auth.py`):
+1. Solange kein Passwort gesetzt ist (und kein `ADMIN_KEY`), antwortet die Admin-API mit `503` und
+   die Verwaltung zeigt die Ersteinrichtung. `POST /api/setup` setzt das Passwort genau einmal, danach `409`.
+2. Gespeichert wird ein scrypt-Hash in der Tabelle `settings` unter `_admin_password`.
+3. `POST /api/admin/login` liefert ein zufälliges Sitzungs-Token. In der Tabelle `admin_sessions` liegt nur
+   dessen SHA-256. Eine Sitzung endet nach 30 Tagen ohne Nutzung, beim Abmelden, und beim Passwortwechsel
+   enden alle anderen. Fehlversuche: 10 pro IP in 5 Minuten, wie beim Koppeln.
+4. Die Verwaltung schickt das Token im Header `x-admin-key` und hält es in `sessionStorage`,
+   bei „Angemeldet bleiben“ in `localStorage`. Statt eines Tokens geht dort auch `ADMIN_KEY` (Notfall, Skripte).
+
+**Einstellungen** (`backend/app/config.py`): `env_settings` enthält nur die Container-Variablen,
+`settings` gilt im Betrieb. Beim Start und nach jedem `PUT /api/settings` legt `config.apply()` die Werte
+aus der Tabelle `settings` darüber. `EDITABLE` legt fest, was die Verwaltung ändern darf und was geheim ist.
+Geheime Werte gibt `GET /api/settings` nie heraus, nur `set` und `source` (`admin`, `env`, `default`).
+Ändern sich `ha_url` oder `ha_token`, baut `ha.reconfigure()` den HTTP-Client neu und trennt die
+WebSocket-Verbindung, die sich dann sofort mit den neuen Werten verbindet.
+
+**Testen ohne Speichern:** `POST /api/settings/test/{kind}` nimmt dieselben Felder wie `PUT /api/settings`,
+legt sie auf eine Kopie der aktuellen Einstellungen und prüft damit den Dienst. Leere Schlüssel heißen
+„gespeicherten Wert nehmen“. Die Antwort ist immer `{ok, message}`, Fehler der Anbieter werden auf
+verständliche deutsche Meldungen abgebildet.
+
+**Sicherung:** `GET /api/backup` liefert Räume, Geräte-Zuordnung, Tablets (mit Token) und Einstellungen
+als JSON (`format: hausgeist-backup`). `POST /api/backup` ersetzt alles in einer Transaktion, bei einem
+Fehler bleibt der alte Stand. Danach werden Einstellungen neu angewendet, Home Assistant neu verbunden
+und alle Tablets mit `4000` neu geladen. Passwort und Sitzungen sind nicht Teil der Sicherung.
+
+**Datenbank:** SQLite im WAL-Modus, eine Verbindung pro Thread (`db.conn()`), weil FastAPI normale
+Endpunkte parallel im Threadpool ausführt.
 
 ## App-Updates
 `GET /api/app/update` liefert das neueste GitHub-Release aus `UPDATE_REPO` (Version, APK-Link).
@@ -107,7 +137,7 @@ vergleicht mit ihrer eigenen Version (`package_info_plus`) und zeigt bei Bedarf 
 sind, installiert Android sie als Update.
 
 ## Tests
-- `backend/tests/`: pytest mit einer Attrappe von Home Assistant. Getestet werden Admin-Schutz, Räume, Bereichs-Import,
+- `backend/tests/`: pytest mit einer Attrappe von Home Assistant. Getestet werden Ersteinrichtung, Anmeldung, Einstellungen, Sicherung, Räume, Bereichs-Import,
   Tablets, Kopplung (einmalig, Ablauf, Sperre), Raum-Grenzen bei Befehlen, WebSocket-Anmeldung und
   -Neuladen, Werkzeug-Aufrufe des Sprachassistenten und sein Gedächtnis.
 - `app/test/`: Display-Logik, Gerätemodell, Oberfläche im Demo-Modus, Einrichtung, Versionsvergleich.
@@ -115,15 +145,22 @@ sind, installiert Android sie als Update.
   APK und hängt sie bei Tags `v*` ans Release.
 
 ## API (Kurzüberblick)
+„Admin“ heißt Header `x-admin-key` mit Sitzungs-Token oder `ADMIN_KEY`.
+
 | Endpoint | Auth | Zweck |
 |---|---|---|
-| `GET /api/status` | Admin-Key | Zustand von Server, HA, Providern, Tablets |
-| `GET/POST /api/rooms`, `PATCH/DELETE /api/rooms/{id}` | Admin-Key | Räume |
-| `PUT /api/rooms/{id}/entities`, `PUT /api/rooms/{id}/presence` | Admin-Key | Geräte, Präsenzmelder |
-| `GET /api/ha/areas`, `POST /api/rooms/import-areas` | Admin-Key | HA-Bereiche übernehmen |
-| `GET /api/entities` | Admin-Key | alle HA-Geräte |
-| `GET/POST /api/tablets`, `PATCH/DELETE /api/tablets/{id}` | Admin-Key | Tablets |
-| `POST /api/tablets/{id}/pair`, `/token`; `PUT /api/tablets/{id}/display` | Admin-Key | Code, Token, Display |
+| `GET/POST /api/setup` | – | Einrichtungsstatus, Passwort einmalig setzen |
+| `POST /api/admin/login`, `/logout`; `PUT /api/admin/password` | Passwort / Admin | Sitzungen, Passwort |
+| `GET/PUT /api/settings`, `POST /api/settings/test/{kind}` | Admin | Einstellungen lesen, speichern, testen |
+| `POST /api/voice/test` | Admin | Sprachbefehl im Namen eines Raums |
+| `GET/POST /api/backup` | Admin | Sicherung |
+| `GET /api/status` | Admin | Zustand von Server, HA, Providern, Tablets |
+| `GET/POST /api/rooms`, `PATCH/DELETE /api/rooms/{id}` | Admin | Räume |
+| `PUT /api/rooms/{id}/entities`, `PUT /api/rooms/{id}/presence` | Admin | Geräte, Präsenzmelder |
+| `GET /api/ha/areas`, `POST /api/rooms/import-areas` | Admin | HA-Bereiche übernehmen |
+| `GET /api/entities` | Admin | alle HA-Geräte |
+| `GET/POST /api/tablets`, `PATCH/DELETE /api/tablets/{id}` | Admin | Tablets |
+| `POST /api/tablets/{id}/pair`, `/token`; `PUT /api/tablets/{id}/display` | Admin | Code, Token, Display |
 | `POST /api/pair` | Kopplungscode | Token abholen |
 | `GET /api/me`, `GET /api/app/update` | Tablet-Token | Raum + Geräte, App-Update |
 | `POST /api/entities/{id}/command` | Tablet-Token | Gerät steuern (nur eigener Raum) |
@@ -132,7 +169,7 @@ sind, installiert Android sie als Update.
 
 ## Starten
 ```
-cd backend; copy .env.example .env   # HA_URL, HA_TOKEN, API-Keys eintragen
+cd backend; copy .env.example .env   # optional, alles geht auch unter /admin
 uvicorn app.main:app --reload --port 8080   # lokal (DB_PATH=./hausgeist.db)
 docker compose up -d --build                 # Unraid
 ```

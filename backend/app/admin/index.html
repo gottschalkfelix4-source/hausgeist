@@ -8,15 +8,34 @@
   <link rel="stylesheet" href="admin.css">
 </head>
 <body>
-  <!-- Anmeldung mit dem ADMIN_KEY aus der Server-Konfiguration -->
+  <!-- Erster Aufruf: Passwort für die Verwaltung festlegen -->
+  <main id="setup" class="login" hidden>
+    <form class="glass card login-card" id="setup-form">
+      <div class="brand"><img src="logo.svg" alt="" width="48" height="48"><span>Hausgeist</span></div>
+      <h1>Willkommen</h1>
+      <p class="muted">Lege zuerst ein Passwort für die Verwaltung fest. Danach richtest du Home Assistant, den Sprachassistenten, Räume und Tablets ein.</p>
+      <label class="field">
+        <span>Passwort</span>
+        <input type="password" name="password" autocomplete="new-password" minlength="8" required>
+        <small>Mindestens 8 Zeichen</small>
+      </label>
+      <label class="field">
+        <span>Passwort wiederholen</span>
+        <input type="password" name="repeat" autocomplete="new-password" minlength="8" required>
+      </label>
+      <p class="error" id="setup-error" hidden></p>
+      <button class="btn primary" type="submit">Weiter</button>
+    </form>
+  </main>
+
   <main id="login" class="login" hidden>
     <form class="glass card login-card" id="login-form">
       <div class="brand"><img src="logo.svg" alt="" width="48" height="48"><span>Hausgeist</span></div>
       <h1>Verwaltung</h1>
-      <p class="muted">Mit dem <code>ADMIN_KEY</code> aus der Server-Konfiguration anmelden.</p>
       <label class="field">
-        <span>Admin-Key</span>
+        <span>Passwort</span>
         <input type="password" id="login-key" autocomplete="current-password" required>
+        <small>Vergessen? <code>ADMIN_KEY</code> in der Container-Konfiguration setzen und damit anmelden.</small>
       </label>
       <label class="check"><input type="checkbox" id="login-remember"> Auf diesem Gerät angemeldet bleiben</label>
       <p class="error" id="login-error" hidden></p>
@@ -30,6 +49,7 @@
       <a href="#/uebersicht" data-nav="uebersicht">Übersicht</a>
       <a href="#/raeume" data-nav="raeume">Räume</a>
       <a href="#/tablets" data-nav="tablets">Tablets</a>
+      <a href="#/einstellungen" data-nav="einstellungen">Einstellungen</a>
       <span class="grow"></span>
       <a href="/docs" target="_blank" rel="noopener" class="small">API-Doku</a>
       <button type="button" class="link small" id="logout">Abmelden</button>

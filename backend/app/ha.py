@@ -70,14 +70,58 @@ def _value_data(domain: str, action: str, value) -> dict:
 
 class HomeAssistant:
     def __init__(self) -> None:
-        self.http = httpx.AsyncClient(
-            base_url=settings.ha_url.rstrip("/"),
-            headers={"Authorization": f"Bearer {settings.ha_token}"},
-            timeout=10,
-        )
+        self.http = self._client()
         # Spiegel der HA-Zustaende, gefuettert vom WebSocket. Nur gueltig, solange verbunden.
         self._cache: dict[str, dict] = {}
         self.connected = False
+        self.last_error: str | None = None
+        self._kick = asyncio.Event()  # weckt die Verbindungsschleife nach einer Konfig-Aenderung
+        self._ws = None
+
+    @staticmethod
+    def _client(url: str | None = None, token: str | None = None) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            base_url=(url if url is not None else settings.ha_url).rstrip("/"),
+            headers={"Authorization": f"Bearer {token if token is not None else settings.ha_token}"},
+            timeout=10,
+        )
+
+    async def reconfigure(self) -> None:
+        """Adresse oder Token wurden in der Verwaltung geaendert: sofort neu verbinden."""
+        old, self.http = self.http, self._client()
+        self.connected = False
+        self._kick.set()
+        if self._ws is not None:
+            await self._ws.close()
+        await old.aclose()
+
+    async def _pause(self, seconds: float) -> None:
+        try:
+            await asyncio.wait_for(self._kick.wait(), seconds)
+        except TimeoutError:
+            pass
+        self._kick.clear()
+
+    @staticmethod
+    async def probe(url: str, token: str) -> dict:
+        """Verbindung mit (evtl. noch nicht gespeicherten) Zugangsdaten pruefen."""
+        if not token.strip():
+            return {"ok": False, "message": "Es ist kein Zugriffstoken eingetragen."}
+        try:
+            async with HomeAssistant._client(url, token) as http:
+                r = await http.get("/api/")
+                if r.status_code == 401:
+                    return {"ok": False, "message": "Home Assistant lehnt den Token ab."}
+                r.raise_for_status()
+                cfg = (await http.get("/api/config")).json()
+                states = (await http.get("/api/states")).json()
+        except httpx.HTTPError as e:
+            return {"ok": False, "message": f"Home Assistant ist unter {url} nicht erreichbar ({type(e).__name__})."}
+        except ValueError:
+            return {"ok": False, "message": "Unter dieser Adresse antwortet kein Home Assistant."}
+        n = sum(1 for s in states if s["entity_id"].split(".")[0] in SUPPORTED_DOMAINS)
+        return {"ok": True, "message": f"Verbunden mit {cfg.get('location_name') or 'Home Assistant'} "
+                                       f"(Version {cfg.get('version', '?')}, {n} Geräte).", "entities": n}
 
     @property
     def ws_url(self) -> str:
@@ -118,7 +162,7 @@ class HomeAssistant:
         """Einmalige WebSocket-Abfragen, z. B. config/area_registry/list. Ergebnisse in Reihenfolge."""
         async with websockets.connect(self.ws_url, max_size=None) as ws:
             if not await self._auth(ws):
-                raise RuntimeError("HA-Auth fehlgeschlagen (HA_TOKEN pruefen)")
+                raise RuntimeError("Home Assistant lehnt den Token ab")
             out = []
             for i, t in enumerate(types, start=1):
                 await ws.send(json.dumps({"id": i, "type": t}))
@@ -151,17 +195,26 @@ class HomeAssistant:
     async def listen(self, on_state_changed: Callable[[dict], Awaitable[None]]) -> None:
         """Dauerhaft state_changed-Events empfangen, mit Reconnect."""
         while True:
+            if not settings.ha_token.strip():
+                self.last_error = "Kein Zugriffstoken eingetragen"
+                await self._pause(3600)
+                continue
             try:
-                async with websockets.connect(self.ws_url, max_size=None) as ws:
+                async with websockets.connect(self.ws_url, max_size=None, open_timeout=10) as ws:
+                    self._ws = ws
                     if not await self._auth(ws):
-                        log.error("HA-Auth fehlgeschlagen (HA_TOKEN pruefen)")
-                        await asyncio.sleep(30)
+                        log.error("HA-Auth fehlgeschlagen (Token pruefen)")
+                        self.last_error = "Home Assistant lehnt den Token ab"
+                        self._ws = None
+                        await ws.close()
+                        await self._pause(30)
                         continue
                     await ws.send(json.dumps({"id": 1, "type": "subscribe_events",
                                               "event_type": "state_changed"}))
                     # Erst abonnieren, dann laden: so geht zwischendurch keine Aenderung verloren.
                     self._cache = {s["entity_id"]: s for s in await self._fetch_states()}
                     self.connected = True
+                    self.last_error = None
                     log.info("HA WebSocket verbunden (%d Entitaeten)", len(self._cache))
                     async for raw in ws:
                         msg = json.loads(raw)
@@ -178,8 +231,10 @@ class HomeAssistant:
                 raise
             except Exception as e:  # noqa: BLE001
                 log.warning("HA WebSocket getrennt: %s - Retry in 5s", e)
+                self.last_error = f"Nicht erreichbar ({type(e).__name__})"
+            self._ws = None
             self.connected = False
-            await asyncio.sleep(5)
+            await self._pause(5)
 
 
 ha = HomeAssistant()

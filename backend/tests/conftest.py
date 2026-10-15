@@ -70,14 +70,14 @@ def fake_ha(monkeypatch):
 def client(tmp_path, monkeypatch, fake_ha):
     monkeypatch.setattr(settings, "db_path", str(tmp_path / "test.db"))
     monkeypatch.setattr(settings, "admin_key", "test-admin")
-    db._conn = None
+    db.close()
     hub.clients.clear()
     pipeline._history.clear()
-    main._pair_failures.clear()
+    for fails in main._failures.values():
+        fails.clear()
     with TestClient(main.app) as c:
         yield c
-    db._conn.close()
-    db._conn = None
+    db.close()
 
 
 @pytest.fixture

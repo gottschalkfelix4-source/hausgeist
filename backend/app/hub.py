@@ -37,6 +37,14 @@ class Hub:
                 except Exception:  # noqa: BLE001
                     pass
 
+    async def reload_all(self) -> None:
+        for ws in list(self.clients):
+            self.remove(ws)
+            try:
+                await ws.close(code=4000)
+            except Exception:  # noqa: BLE001
+                pass
+
     def remove(self, ws: WebSocket) -> None:
         self.clients.pop(ws, None)
 
