@@ -15,8 +15,9 @@ class Settings(BaseSettings):
     elevenlabs_voice_id: str = ""
     elevenlabs_model: str = "eleven_multilingual_v2"
 
-    stt_provider: str = "openai"
+    stt_provider: str = "openai"  # openai | xai
     stt_model: str = "gpt-4o-mini-transcribe"
+    xai_stt_model: str = "grok-voice-transcribe-2.0"
     stt_language: str = "de"
     llm_provider: str = "openai"  # openai | xai | custom (OpenAI-kompatibel, z. B. Ollama)
     openai_llm_model: str = "gpt-4o-mini"
@@ -24,9 +25,17 @@ class Settings(BaseSettings):
     custom_llm_url: str = ""
     custom_llm_api_key: str = ""
     custom_llm_model: str = ""
-    tts_provider: str = "elevenlabs"
+    tts_provider: str = "elevenlabs"  # elevenlabs | openai | xai
     openai_tts_model: str = "gpt-4o-mini-tts"
     openai_tts_voice: str = "alloy"
+    xai_voice: str = "eve"  # Grok-Stimme fuers Vorlesen
+    # pipeline: Spracherkennung -> Sprachmodell -> Stimme · live: ein Sprachmodell hoert und spricht selbst
+    voice_mode: str = "pipeline"
+    live_provider: str = "openai"  # openai (GPT-Live) | xai (Grok Voice)
+    openai_live_model: str = "gpt-live-1"
+    openai_live_voice: str = "marin"
+    xai_live_model: str = "grok-voice-3.0"
+    xai_live_voice: str = "eve"
     assistant_instructions: str = ""  # zusaetzliche Anweisungen fuer den Sprachassistenten
     # Aktivierungswort(e), kommagetrennt, optional mit Aussprache in Klammern; leer = aus
     wake_word: str = "Computer"
@@ -43,10 +52,12 @@ EDITABLE: dict[str, bool] = {
     "ha_url": False, "ha_token": True,
     "openai_api_key": True, "xai_api_key": True, "elevenlabs_api_key": True,
     "elevenlabs_voice_id": False, "elevenlabs_model": False,
-    "stt_provider": False, "stt_model": False, "stt_language": False,
+    "stt_provider": False, "stt_model": False, "xai_stt_model": False, "stt_language": False,
     "llm_provider": False, "openai_llm_model": False, "xai_llm_model": False,
     "custom_llm_url": False, "custom_llm_api_key": True, "custom_llm_model": False,
-    "tts_provider": False, "openai_tts_model": False, "openai_tts_voice": False,
+    "tts_provider": False, "openai_tts_model": False, "openai_tts_voice": False, "xai_voice": False,
+    "voice_mode": False, "live_provider": False, "openai_live_model": False, "openai_live_voice": False,
+    "xai_live_model": False, "xai_live_voice": False,
     "assistant_instructions": False, "wake_word": False, "wake_sensitivity": False,
     "update_repo": False,
 }

@@ -111,7 +111,7 @@ def test_pipeline_remembers_short_conversation(client, room, monkeypatch):
     assert [m["role"] for m in llm.calls[2]] == ["system", "user"]
     ts, msgs = pipeline._history["t1"]
     pipeline._history["t1"] = (ts - pipeline.HISTORY_TTL - 1, msgs)
-    assert pipeline._recall("t1") == []
+    assert pipeline.recall("t1") == []
 
 
 # ---------- Update-Info ----------

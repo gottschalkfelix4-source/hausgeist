@@ -237,7 +237,7 @@ class VoiceService extends ChangeNotifier with WidgetsBindingObserver {
       phase = VoicePhase.speaking;
       notifyListeners();
       if (r.audio != null) {
-        await _player.play(BytesSource(Uint8List.fromList(r.audio!), mimeType: 'audio/mpeg'));
+        await _player.play(BytesSource(Uint8List.fromList(r.audio!), mimeType: r.mime));
         await _player.onPlayerComplete.first.timeout(const Duration(seconds: 60), onTimeout: () {});
       }
       if (session == _session) _finish();

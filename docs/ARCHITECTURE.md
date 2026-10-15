@@ -24,7 +24,7 @@ Geräte (Zigbee, Hue, Klima, ...) -> Home Assistant (Unraid)
   Server die betroffenen Tablet-WebSockets mit Code `4000`. Die App lädt dann sofort neu.
 - **Sprache**: Provider in der Verwaltung wählbar. LLM: OpenAI, xAI/Grok oder ein eigener
   OpenAI-kompatibler Server wie Ollama (alle mit demselben Client, nur `base_url` unterscheidet sich),
-  TTS: ElevenLabs oder OpenAI, STT: OpenAI. Der Assistent darf nur Geräte des Tablet-Raums steuern.
+  TTS: ElevenLabs, OpenAI oder xAI, STT: OpenAI oder xAI. Der Assistent darf nur Geräte des Tablet-Raums steuern.
   Er bekommt deren Zustand samt Helligkeit, Temperaturen und Modi und merkt sich pro Tablet die
   letzten 6 Nachrichten für 120 s (`pipeline.HISTORY_*`).
 - **Design (Apple Home)**: Kachel-Grid mit großen Rundungen, Frosted-Glass, aktive Kacheln hell/gelb,
@@ -128,6 +128,30 @@ und alle Tablets mit `4000` neu geladen. Passwort und Sitzungen sind nicht Teil 
 
 **Datenbank:** SQLite im WAL-Modus, eine Verbindung pro Thread (`db.conn()`), weil FastAPI normale
 Endpunkte parallel im Threadpool ausführt.
+
+## Live-Sprachmodelle (`backend/app/voice/live.py`)
+`voice_mode=live` ersetzt STT → LLM → TTS durch ein Modell, das Audio hört und spricht. Die Tablets merken
+davon nichts: Sie laden weiter eine WAV (16 kHz, mono, PCM16) bei `/api/voice/audio` hoch. Der Server
+öffnet pro Befehl eine WebSocket-Sitzung und schickt die Antwort als WAV zurück (`mime: audio/wav`).
+
+**Grok Voice** (`wss://api.x.ai/v1/realtime`): Realtime-Protokoll mit Turns von Hand
+(`turn_detection: null`). `session.update` setzt Anweisungen samt Raumgeräten und Gedächtnis, Stimme,
+Formate (rein 16 kHz, raus 24 kHz) und das Werkzeug `control_device`. Danach Audio anhängen, `commit`,
+`response.create`. Werkzeugaufrufe gehen durch `pipeline.execute`, das die Raumgrenze prüft, die
+Ergebnisse gehen als `function_call_output` zurück (höchstens 4 Runden). Getippter Text geht als Text-Item.
+
+**GPT-Live** (`wss://api.openai.com/v1/live/sessions`): Das Modell kann keine eigenen Werkzeuge aufrufen, sondern
+delegiert an einen Backend-Agenten. Hausgeist ist dieser Agent: Bei `session.delegation.created` läuft
+`pipeline.run` mit dem eingestellten Sprachmodell auf dem Transkript, die Antwort geht per
+`session.commentary.append` zurück und wird gesprochen. Das Audio wird in Echtzeit gestreamt, danach Stille.
+Was vor dem Ende der Aufnahme gesprochen wird (Bestätigungslaute), wird verworfen. Als fertig gilt die
+Antwort nach 1,6 s ohne neues Audio, wenn keine Delegation mehr offen ist (höchstens 45 s).
+Getippter Text wird abgelehnt (`LiveError`) und läuft über den klassischen Weg.
+
+**Ausfallsicherheit:** Scheitert die Live-Sitzung, nimmt `main._live` den klassischen Weg, sofern
+Spracherkennung und Sprachmodell bereit sind, sonst `502` mit der Fehlermeldung. Ohne eingerichtete
+Stimme liefert der klassische Weg nur Text. `POST /api/settings/test/live` macht eine Probe mit
+Begrüßung und misst die Antwortzeit. Getestet wird gegen nachgebaute Server (`backend/tests/test_live.py`).
 
 ## Aktivierungswort und Sprach-Kugel
 **Erkennung auf dem Tablet:** `lib/voice/wake_word.dart` startet in einem eigenen Isolate einen
@@ -239,4 +263,5 @@ Pub-Cache (C:) auf verschiedenen Laufwerken liegen.
 3. ✅ Web-Verwaltung, HA-Bereiche importieren, Kopplung per Code
 4. ✅ Signierte Releases, Update-Hinweis, Tests in der CI
 5. ✅ Aktivierungswort offline auf dem Tablet, Wahl des nächsten Tablets, Sprach-Kugel
-6. Antwort gestreamt abspielen, während sie noch erzeugt wird (niedrigere Latenz)
+6. ✅ Live-Sprachmodelle: GPT-Live-1 (mit Delegation an Hausgeist) und Grok Voice 3.0
+7. Antwort gestreamt abspielen, während sie noch erzeugt wird (niedrigere Latenz)

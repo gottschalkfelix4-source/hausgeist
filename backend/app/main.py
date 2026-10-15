@@ -17,9 +17,10 @@ from . import __version__, auth, config, db, updates
 from .config import EDITABLE, settings
 from .ha import ha
 from .hub import PRESENT_STATES, hub
-from .voice import pipeline, providers, wakeword
+from .voice import live, pipeline, providers, wakeword
 
 logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("hausgeist")
 
 PAIR_TTL = 15 * 60  # s, so lange gilt ein Kopplungscode
 
@@ -97,7 +98,8 @@ async def status():
                "entities": entities, "error": None if ha.connected else ha.last_error},
         "voice": {"stt": settings.stt_provider, "llm": settings.llm_provider, "tts": settings.tts_provider,
                   "stt_ok": providers.stt_ready(settings), "llm_ok": providers.llm_ready(settings),
-                  "tts_ok": providers.tts_ready(settings)},
+                  "tts_ok": providers.tts_ready(settings), "mode": settings.voice_mode,
+                  "live": settings.live_provider, "live_ok": providers.live_ready(settings)},
         "tablets_online": len(hub.online()),
         "password_set": auth.has_password(),
     }
@@ -174,8 +176,9 @@ class SettingsPatch(BaseModel):
     elevenlabs_api_key: str | None = Field(None, max_length=500)
     elevenlabs_voice_id: str | None = Field(None, max_length=100)
     elevenlabs_model: str | None = Field(None, max_length=100)
-    stt_provider: Literal["openai"] | None = None
+    stt_provider: Literal["openai", "xai"] | None = None
     stt_model: str | None = Field(None, max_length=100)
+    xai_stt_model: str | None = Field(None, max_length=100)
     stt_language: str | None = Field(None, pattern=r"^([a-z]{2})?$")
     llm_provider: Literal["openai", "xai", "custom"] | None = None
     openai_llm_model: str | None = Field(None, max_length=100)
@@ -183,9 +186,16 @@ class SettingsPatch(BaseModel):
     custom_llm_url: str | None = Field(None, pattern=r"^$|" + HTTP_URL, max_length=300)
     custom_llm_api_key: str | None = Field(None, max_length=500)
     custom_llm_model: str | None = Field(None, max_length=100)
-    tts_provider: Literal["elevenlabs", "openai"] | None = None
+    tts_provider: Literal["elevenlabs", "openai", "xai"] | None = None
     openai_tts_model: str | None = Field(None, max_length=100)
     openai_tts_voice: str | None = Field(None, max_length=50)
+    xai_voice: str | None = Field(None, max_length=100)
+    voice_mode: Literal["pipeline", "live"] | None = None
+    live_provider: Literal["openai", "xai"] | None = None
+    openai_live_model: str | None = Field(None, max_length=100)
+    openai_live_voice: str | None = Field(None, max_length=100)
+    xai_live_model: str | None = Field(None, max_length=100)
+    xai_live_voice: str | None = Field(None, max_length=100)
     assistant_instructions: str | None = Field(None, max_length=4000)
     wake_word: str | None = Field(None, max_length=300)
     wake_sensitivity: Literal["niedrig", "mittel", "hoch"] | None = None
@@ -249,7 +259,7 @@ def _error(e: Exception) -> str:
 
 
 @app.post("/api/settings/test/{kind}", dependencies=[Depends(admin)])
-async def test_settings(kind: Literal["ha", "llm", "stt", "tts", "voices"], body: SettingsPatch):
+async def test_settings(kind: Literal["ha", "llm", "stt", "tts", "voices", "xai_voices", "live"], body: SettingsPatch):
     """Probiert eine Verbindung mit den Werten aus dem Formular aus, ohne zu speichern."""
     cfg = _preview(body)
     try:
@@ -267,10 +277,29 @@ async def test_settings(kind: Literal["ha", "llm", "stt", "tts", "voices"], body
             return {"ok": True, "message": f"{model} antwortet in {ms} ms: „{(res.choices[0].message.content or '').strip()}“"}
         if kind == "stt":
             if not providers.stt_ready(cfg):
-                return {"ok": False, "message": "Es fehlt der OpenAI-Schlüssel."}
+                return {"ok": False, "message": f"Es fehlt der {'xAI' if cfg.stt_provider == 'xai' else 'OpenAI'}-Schlüssel."}
+            if cfg.stt_provider == "xai":
+                # Eine halbe Sekunde Stille: Schluessel und Modell werden geprueft, Text kommt keiner zurueck.
+                await providers.transcribe(live.to_wav(bytes(16000), 16000), "probe.wav", cfg)
+                return {"ok": True, "message": f"Schlüssel gültig, {cfg.xai_stt_model} antwortet."}
             client = providers.AsyncOpenAI(api_key=cfg.openai_api_key)
             await client.models.retrieve(cfg.stt_model)
             return {"ok": True, "message": f"Schlüssel gültig, Modell {cfg.stt_model} verfügbar."}
+        if kind == "xai_voices":
+            if not cfg.xai_api_key.strip():
+                return {"ok": False, "message": "Es fehlt der xAI-Schlüssel.", "voices": []}
+            voices = await providers.xai_voices(cfg)
+            return {"ok": True, "message": f"{len(voices)} Stimmen gefunden.", "voices": voices}
+        if kind == "live":
+            if not providers.live_ready(cfg):
+                return {"ok": False, "message": f"Es fehlt der {'xAI' if cfg.live_provider == 'xai' else 'OpenAI'}-Schlüssel."}
+            start = time.monotonic()
+            turn = await live.probe(cfg)
+            secs = round(time.monotonic() - start, 1)
+            model = cfg.xai_live_model if cfg.live_provider == "xai" else cfg.openai_live_model
+            said = f": „{turn.reply}“" if turn.reply else "."
+            return {"ok": True, "message": f"{model} antwortet nach {str(secs).replace('.', ',')} s{said}",
+                    **turn.response()}
         if kind == "voices":
             if not cfg.elevenlabs_api_key.strip():
                 return {"ok": False, "message": "Es fehlt der ElevenLabs-Schlüssel.", "voices": []}
@@ -296,6 +325,9 @@ async def voice_test(body: VoiceTest):
     """Sprachassistent aus der Verwaltung ausprobieren, als stuende man im gewaehlten Raum."""
     if body.room_id:
         _get("rooms", body.room_id)
+    if _live_on() and settings.live_provider == "xai" and body.speak:
+        if r := await _live({"room_id": body.room_id, "id": f"admin:{body.room_id}"}, text=body.text):
+            return r
     try:
         result = await pipeline.run(body.text, body.room_id, f"admin:{body.room_id}")
         if body.speak and providers.tts_ready(settings):
@@ -702,20 +734,47 @@ class VoiceText(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
 
 
+def _live_on() -> bool:
+    return settings.voice_mode == "live" and providers.live_ready(settings)
+
+
+def _classic_ready() -> bool:
+    return providers.stt_ready(settings) and providers.llm_ready(settings)
+
+
 async def _voice(text: str, tab) -> dict:
     result = await pipeline.run(text, tab["room_id"], tab["id"])
+    if not providers.tts_ready(settings):
+        return result  # ohne Stimme: Antwort nur als Text auf dem Tablet
     audio, mime = await providers.synthesize(result["reply"])
     return {**result, "audio_base64": base64.b64encode(audio).decode(), "mime": mime}
 
 
+async def _live(tab, *, pcm: bytes | None = None, text: str | None = None) -> dict | None:
+    """Live-Sprachmodell; None, wenn es scheitert und der klassische Weg einspringen kann."""
+    try:
+        turn = await live.converse(pcm=pcm, text=text, room_id=tab["room_id"], session=tab["id"])
+        return turn.response()
+    except Exception as e:  # noqa: BLE001
+        log.warning("Live-Sprachmodell: %s", _error(e))
+        if not (providers.llm_ready(settings) and (text or providers.stt_ready(settings))):
+            raise HTTPException(502, f"Sprachdienst: {_error(e)}") from e
+        return None
+
+
 @app.post("/api/voice/text")
 async def voice_text(body: VoiceText, tab=Depends(tablet)):
+    if _live_on() and settings.live_provider == "xai" and (r := await _live(tab, text=body.text)):
+        return r
     return await _voice(body.text, tab)
 
 
 @app.post("/api/voice/audio")
 async def voice_audio(file: UploadFile, tab=Depends(tablet)):
-    text = await providers.transcribe(await file.read(), file.filename or "audio.m4a")
+    data = await file.read()
+    if _live_on() and (pcm := live.read_wav(data)) is not None and (r := await _live(tab, pcm=pcm)):
+        return r
+    text = await providers.transcribe(data, file.filename or "audio.m4a")
     if not text.strip():
         return {"transcript": "", "reply": "Ich habe nichts verstanden.", "actions": []}
     return {"transcript": text, **await _voice(text, tab)}

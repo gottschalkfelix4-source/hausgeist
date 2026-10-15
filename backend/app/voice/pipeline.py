@@ -37,7 +37,7 @@ HISTORY_MAX = 6    # Nachrichten (Nutzer + Assistent)
 _history: dict[str, tuple[float, list[dict]]] = {}
 
 
-def _recall(key: str | None) -> list[dict]:
+def recall(key: str | None) -> list[dict]:
     if not key or key not in _history:
         return []
     ts, msgs = _history[key]
@@ -47,10 +47,10 @@ def _recall(key: str | None) -> list[dict]:
     return msgs
 
 
-def _remember(key: str | None, text: str, reply: str) -> None:
+def remember(key: str | None, text: str, reply: str) -> None:
     if not key:
         return
-    msgs = _recall(key) + [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
+    msgs = recall(key) + [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
     _history[key] = (time.monotonic(), msgs[-HISTORY_MAX:])
 
 
@@ -73,7 +73,8 @@ async def _room_context(room_id: str | None) -> tuple[str, set[str]]:
     return "\n".join(lines) or "Keine Geraete im Raum.", ids
 
 
-async def run(text: str, room_id: str | None, session: str | None = None) -> dict:
+async def prompt(room_id: str | None) -> tuple[str, set[str]]:
+    """Systemanweisung mit den Geraeten des Raums und die Menge der erlaubten Geraete."""
     context, allowed = await _room_context(room_id)
     room = db.conn().execute("SELECT name FROM rooms WHERE id=?", (room_id,)).fetchone()
     system = (
@@ -83,8 +84,26 @@ async def run(text: str, room_id: str | None, session: str | None = None) -> dic
     )
     if settings.assistant_instructions.strip():
         system += "\n\nZusaetzliche Anweisungen des Hausherrn:\n" + settings.assistant_instructions.strip()
+    return system, allowed
+
+
+async def execute(args: dict, allowed: set[str], actions: list[dict]) -> str:
+    """Einen Werkzeug-Aufruf ausfuehren. Geraete ausserhalb des Raums werden abgelehnt."""
+    if args.get("entity_id") not in allowed:
+        return "Fehler: Geraet gehoert nicht zu diesem Raum."
+    try:
+        extra = {k: args[k] for k in ("color_temp_kelvin", "hs_color") if args.get(k) is not None}
+        await ha.command(args["entity_id"], args["action"], args.get("value"), extra)
+        actions.append(args)
+        return "ok"
+    except Exception as e:  # noqa: BLE001
+        return f"Fehler: {e}"
+
+
+async def run(text: str, room_id: str | None, session: str | None = None) -> dict:
+    system, allowed = await prompt(room_id)
     client, model = llm_client()
-    messages = [{"role": "system", "content": system}, *_recall(session), {"role": "user", "content": text}]
+    messages = [{"role": "system", "content": system}, *recall(session), {"role": "user", "content": text}]
     actions: list[dict] = []
 
     for _ in range(4):
@@ -92,20 +111,14 @@ async def run(text: str, room_id: str | None, session: str | None = None) -> dic
         msg = res.choices[0].message
         if not msg.tool_calls:
             reply = msg.content or ""
-            _remember(session, text, reply)
+            remember(session, text, reply)
             return {"reply": reply, "actions": actions}
         messages.append(msg)
         for call in msg.tool_calls:
-            args = json.loads(call.function.arguments)
-            if args.get("entity_id") not in allowed:
-                result = "Fehler: Geraet gehoert nicht zu diesem Raum."
-            else:
-                try:
-                    extra = {k: args[k] for k in ("color_temp_kelvin", "hs_color") if args.get(k) is not None}
-                    await ha.command(args["entity_id"], args["action"], args.get("value"), extra)
-                    actions.append(args)
-                    result = "ok"
-                except Exception as e:  # noqa: BLE001
-                    result = f"Fehler: {e}"
+            try:
+                args = json.loads(call.function.arguments)
+            except ValueError:
+                args = {}
+            result = await execute(args, allowed, actions)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
     return {"reply": "Das hat leider nicht geklappt.", "actions": actions}

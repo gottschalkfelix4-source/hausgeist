@@ -47,7 +47,7 @@ Das Display bleibt immer bereit. Es wird hell, sobald jemand davor steht, und du
 | 💡 **Licht** | Ein/aus, Helligkeit per Wischen über die Kachel, Farbrad, Weißtöne in Kelvin, Favoriten. |
 | ❄️ **Klima** | Drehregler für die Zieltemperatur, Modi (Kühlen, Heizen, Automatik, Entfeuchten, Lüften), Lüfterstufe, Lamellen, Eco. |
 | 🪟 **Rollos, Musik, Szenen, Schlösser** | Position, Lautstärke und Titel, Szenen per Tipp, Türschloss. |
-| 🗣️ **Sprachassistent** | Einfach „Computer“ sagen (das Wort ist frei wählbar) oder aufs Mikro tippen. Eine leuchtende Kugel zeigt, dass zugehört wird, und bewegt sich mit der Stimme. Hören mehrere Tablets den Ruf, antwortet nur das, bei dem gerade jemand ist. Das Aktivierungswort erkennt das Tablet selbst, ohne Internet. Spracherkennung mit OpenAI, Sprachmodell OpenAI, Grok (xAI) oder ein eigenes wie Ollama, Antwortstimme mit ElevenLabs oder OpenAI. Er merkt sich die letzten Sätze, „und jetzt etwas dunkler“ funktioniert also. |
+| 🗣️ **Sprachassistent** | Einfach „Computer“ sagen (das Wort ist frei wählbar) oder aufs Mikro tippen. Eine leuchtende Kugel zeigt, dass zugehört wird, und bewegt sich mit der Stimme. Hören mehrere Tablets den Ruf, antwortet nur das, bei dem gerade jemand ist. Das Aktivierungswort erkennt das Tablet selbst, ohne Internet. Spracherkennung mit OpenAI oder Grok, Sprachmodell OpenAI, Grok (xAI) oder ein eigenes wie Ollama, Antwortstimme mit ElevenLabs, OpenAI oder Grok. Oder ein **Live-Sprachmodell** (GPT-Live-1, Grok Voice 3.0), das selbst hört und spricht. Er merkt sich die letzten Sätze, „und jetzt etwas dunkler“ funktioniert also. |
 | 👋 **Wird hell bei Annäherung** | Die Frontkamera erkennt, wenn jemand vor das Tablet tritt. Antippen ist nicht nötig. Wer hinten im Raum vorbeigeht, weckt es nicht. |
 | 🌙 **Blendet nicht** | Die Helligkeit folgt dem Raumlicht. Nachts gibt es eine Obergrenze und ein dunkles Design. |
 | 🔁 **Live** | Änderungen aus Home Assistant erscheinen sofort, nach einem Verbindungsabbruch verbindet sich die App selbst neu. |
@@ -93,7 +93,7 @@ Du brauchst:
 - Home Assistant mit einem **Long-Lived Access Token** (in Home Assistant: Profil → Sicherheit → *Langlebige Zugriffstoken*)
 - einen Docker-Host, zum Beispiel Unraid
 - ein oder mehrere Android-Tablets (Android 7 oder neuer, Frontkamera empfohlen)
-- für Sprache: einen OpenAI-API-Key, optional xAI- oder ElevenLabs-Keys oder ein eigenes Sprachmodell (Ollama, LM Studio)
+- für Sprache: einen OpenAI- oder xAI-API-Key, optional ElevenLabs oder ein eigenes Sprachmodell (Ollama, LM Studio)
 
 ### 1. Server auf Unraid
 
@@ -128,7 +128,7 @@ Danach führt ein Assistent in vier Schritten durch die Einrichtung. Jeden Schri
 und später unter **Einstellungen** oder über die Checkliste in der **Übersicht** nachholen.
 
 1. **Home Assistant:** Adresse und Token eintragen, **Verbindung testen**, speichern.
-2. **Sprachassistent:** Sprachmodell (OpenAI, Grok oder ein eigenes), Stimme (ElevenLabs oder OpenAI) und
+2. **Sprachassistent:** Sprachmodell (OpenAI, Grok oder ein eigenes), Stimme (ElevenLabs, OpenAI oder Grok) und
    die nötigen API-Schlüssel. Beim Speichern prüft Hausgeist, ob das Sprachmodell antwortet.
 3. **Räume:** Mit **Aus Home Assistant übernehmen** legt Hausgeist für jeden Bereich (Area) einen Raum an
    und ordnet die Geräte zu. Gibt es im Bereich genau einen Präsenzmelder, wird er automatisch eingetragen.
@@ -196,7 +196,7 @@ die APK im Browser, danach die Datei öffnen und installieren. Kopplung und Eins
 | **Räume** | Bereiche aus Home Assistant übernehmen, Räume anlegen, umbenennen, löschen. Geräte per Suche und Häkchen zuordnen. Präsenzmelder wählen. |
 | **Tablets** | Tablets anlegen und einem Raum zuweisen, auch mehrere pro Raum. Kopplungscode erzeugen, Token erneuern, Tablet entfernen. Display-Verhalten pro Tablet einstellen. |
 | **Einstellungen → Home Assistant** | Adresse und Token ändern und testen. Hausgeist verbindet sich nach dem Speichern sofort neu, ohne Neustart. |
-| **Einstellungen → Sprachassistent** | Sprachmodell, Stimme, Spracherkennung, API-Schlüssel und eigene Anweisungen an den Assistenten. Jeder Dienst hat einen **Testen**-Knopf, ElevenLabs-Stimmen lassen sich aus deinem Konto auswählen und probehören. Unter **Ausprobieren** schickst du einen Befehl wie vom Tablet eines Raums. Dort stellst du auch das **Aktivierungswort** und seine Empfindlichkeit ein. |
+| **Einstellungen → Sprachassistent** | Betriebsart (klassisch oder Live-Sprachmodell), Sprachmodell, Stimme, Spracherkennung, API-Schlüssel und eigene Anweisungen an den Assistenten. Jeder Dienst hat einen **Testen**-Knopf, ElevenLabs-Stimmen lassen sich aus deinem Konto auswählen und probehören. Unter **Ausprobieren** schickst du einen Befehl wie vom Tablet eines Raums. Dort stellst du auch das **Aktivierungswort** und seine Empfindlichkeit ein. |
 | **Einstellungen → System** | Update-Quelle, Sicherung herunterladen und wiederherstellen, Passwort ändern. |
 
 <p align="center">
@@ -243,9 +243,9 @@ wird dunkel. Alle Werte lassen sich pro Tablet in der Verwaltung unter **Tablets
 ## Sprachassistent
 
 ```
-Tablet ── Audio (WAV) ──► Server ── STT (OpenAI) ──► LLM (OpenAI | Grok) ──► Werkzeug control_device
+Tablet ── Audio (WAV) ──► Server ── STT (OpenAI | Grok) ──► LLM (OpenAI | Grok | eigenes) ──► Werkzeug control_device
                                                                      │
-Tablet ◄── Antwort + Audio ◄── TTS (ElevenLabs | OpenAI) ◄───────────┘
+Tablet ◄── Antwort + Audio ◄── TTS (ElevenLabs | OpenAI | Grok) ◄────┘
 ```
 
 Das Sprachmodell bekommt nur die Geräte des Tablet-Raums mit ihrem aktuellen Zustand und kann nur diese steuern.
@@ -256,9 +256,28 @@ Anbieter, Modelle und Stimme stellst du in der Verwaltung unter *Einstellungen �
 
 | | Anbieter | Einstellbar |
 |---|---|---|
-| **Spracherkennung** | OpenAI | Modell (`gpt-4o-mini-transcribe`, `whisper-1`, …), Sprache |
+| **Spracherkennung** | OpenAI oder xAI (Grok) | Modell (`gpt-4o-mini-transcribe`, `whisper-1`, `grok-voice-transcribe-2.0`, …), Sprache |
 | **Sprachmodell** | OpenAI, xAI (Grok) oder **eigenes** | Modell. Eigenes = jeder OpenAI-kompatible Server, z. B. Ollama (`http://<ip>:11434/v1`) oder LM Studio. Das Modell muss Tool-Calling können, etwa `llama3.1` oder `qwen2.5`. |
-| **Stimme** | ElevenLabs oder OpenAI | ElevenLabs: Stimme aus deinem Konto, Modell. OpenAI: Modell, Stimme (`alloy`, `nova`, …) |
+| **Stimme** | ElevenLabs, OpenAI oder xAI (Grok) | ElevenLabs: Stimme aus deinem Konto, Modell. OpenAI: Modell, Stimme (`alloy`, `nova`, …). Grok: Stimme (`eve`, `ara`, `rex`, `leo`, … oder eine eigene geklonte) |
+
+Ohne Stimme antwortet der Assistent nur mit Text auf dem Tablet.
+
+### Live-Sprachmodell (GPT-Live, Grok Voice)
+
+Statt der drei Bausteine kann ein **Live-Sprachmodell** die Aufnahme direkt hören und mit eigener Stimme
+antworten. Das klingt natürlicher, mit Betonung und Pausen wie im Gespräch. Umstellen unter
+*Einstellungen → Sprachassistent → Betriebsart*, mit **Probe anhören** hörst du die Stimme sofort.
+
+| | GPT-Live-1 (OpenAI) | Grok Voice 3.0 (xAI) |
+|---|---|---|
+| Geräte schalten | gibt den Befehl an Hausgeist weiter, das eingestellte **Sprachmodell** schaltet | schaltet selbst über dasselbe Werkzeug |
+| Stimmen | `marin` und 12 weitere, sprechen Deutsch mit leichtem Akzent (meist englisch) | `eve`, `ara`, `rex`, `leo` u. a. und eigene geklonte |
+| Getippte Befehle | laufen über den klassischen Weg | laufen über Grok Voice |
+| Preis (Stand Oktober 2026) | ca. 0,05 $ pro Minute, dazu das Sprachmodell bei Gerätebefehlen | ca. 0,08 $ pro Minute |
+
+In beiden Fällen gelten dieselben Grenzen: nur Geräte des Tablet-Raums, dazu deine Anweisungen unter
+**Persönlichkeit** und das Gesprächsgedächtnis. Antwortet das Live-Modell nicht, springt der klassische Weg
+ein, sofern Spracherkennung und Sprachmodell eingerichtet sind.
 
 Unter **Persönlichkeit** kannst du dem Assistenten zusätzliche Anweisungen geben, etwa *„Duze mich und antworte
 in einem Satz.“* Die Regeln zur Gerätesteuerung bleiben davon unberührt.
@@ -305,17 +324,23 @@ der Variable.** Neben jedem Feld steht, woher der aktuelle Wert kommt. Mit **Zur
 | `HA_URL` | `http://homeassistant.local:8123` | Adresse von Home Assistant |
 | `HA_TOKEN` | – | Long-Lived Access Token |
 | `ADMIN_KEY` | – | Notfall-Zugang zur Verwaltung, zusätzlich zum Passwort. Auch für Skripte (`x-admin-key`). |
-| `OPENAI_API_KEY` | – | OpenAI (STT, optional LLM und TTS) |
-| `XAI_API_KEY` | – | xAI / Grok |
+| `OPENAI_API_KEY` | – | OpenAI (STT, optional LLM, TTS und GPT-Live) |
+| `XAI_API_KEY` | – | xAI / Grok (LLM, STT, TTS, Grok Voice) |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | – | ElevenLabs-Stimme |
 | `ELEVENLABS_MODEL` | `eleven_multilingual_v2` | ElevenLabs-Modell |
-| `STT_PROVIDER`, `STT_MODEL`, `STT_LANGUAGE` | `openai`, `gpt-4o-mini-transcribe`, `de` | Spracherkennung |
+| `STT_PROVIDER`, `STT_MODEL`, `STT_LANGUAGE` | `openai`, `gpt-4o-mini-transcribe`, `de` | Spracherkennung (`openai` oder `xai`) |
+| `XAI_STT_MODEL` | `grok-voice-transcribe-2.0` | Spracherkennung für `xai` |
 | `LLM_PROVIDER` | `openai` | `openai`, `xai` oder `custom` |
 | `OPENAI_LLM_MODEL` | `gpt-4o-mini` | Modell für `openai` |
 | `XAI_LLM_MODEL` | `grok-3-mini` | Modell für `xai` |
 | `CUSTOM_LLM_URL`, `CUSTOM_LLM_API_KEY`, `CUSTOM_LLM_MODEL` | – | Eigenes OpenAI-kompatibles Sprachmodell |
-| `TTS_PROVIDER` | `elevenlabs` | `elevenlabs` oder `openai` |
+| `TTS_PROVIDER` | `elevenlabs` | `elevenlabs`, `openai` oder `xai` |
 | `OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE` | `gpt-4o-mini-tts`, `alloy` | Stimme für `openai` |
+| `XAI_VOICE` | `eve` | Stimme für `xai` |
+| `VOICE_MODE` | `pipeline` | `pipeline` (klassisch) oder `live` (Live-Sprachmodell) |
+| `LIVE_PROVIDER` | `openai` | `openai` (GPT-Live) oder `xai` (Grok Voice) |
+| `OPENAI_LIVE_MODEL`, `OPENAI_LIVE_VOICE` | `gpt-live-1`, `marin` | GPT-Live |
+| `XAI_LIVE_MODEL`, `XAI_LIVE_VOICE` | `grok-voice-3.0`, `eve` | Grok Voice |
 | `ASSISTANT_INSTRUCTIONS` | – | Zusätzliche Anweisungen an den Assistenten |
 | `DB_PATH` | `/data/hausgeist.db` | SQLite-Datenbank |
 | `UPDATE_REPO` | `gottschalkfelix4-source/hausgeist` | GitHub-Repo für den Update-Hinweis der App. Leer schaltet ihn ab. |
@@ -351,7 +376,7 @@ Sicherheit im Überblick:
 | `POST /api/admin/login`, `/api/admin/logout` | Passwort / `x-admin-key` | Anmelden, abmelden |
 | `PUT /api/admin/password` | `x-admin-key` | Passwort ändern, beendet andere Sitzungen |
 | `GET/PUT /api/settings` | `x-admin-key` | Einstellungen lesen (Schlüssel nur als „gesetzt“) und speichern, `null` setzt zurück |
-| `POST /api/settings/test/{ha,llm,stt,tts,voices}` | `x-admin-key` | Dienst mit noch nicht gespeicherten Werten testen, ElevenLabs-Stimmen laden |
+| `POST /api/settings/test/{ha,llm,stt,tts,voices,xai_voices,live}` | `x-admin-key` | Dienst mit noch nicht gespeicherten Werten testen, Stimmen von ElevenLabs und Grok laden, Live-Modell probehören |
 | `POST /api/voice/test` | `x-admin-key` | Sprachbefehl wie von einem Tablet im Raum |
 | `GET/POST /api/backup` | `x-admin-key` | Sicherung herunterladen, wiederherstellen |
 | `GET /api/status` | `x-admin-key` | Version, Home Assistant, Sprach-Provider, Tablets online |
@@ -432,6 +457,7 @@ Den Schlüssel bekommt sie aus den Secrets `HAUSGEIST_KEYSTORE_BASE64` und `HAUS
 - [x] Koppeln per Code, signierte Releases, Update-Hinweis in der App
 - [x] Gesprächsgedächtnis für den Sprachassistenten
 - [x] Aktivierungswort (frei wählbar, offline) mit Wahl des nächsten Tablets und animierter Sprach-Kugel
+- [x] Live-Sprachmodelle (GPT-Live-1, Grok Voice 3.0), Grok als Stimme und Spracherkennung
 - [ ] Antwort gestreamt abspielen, während sie noch erzeugt wird
 
 ## Lizenz

@@ -12,6 +12,7 @@ const DOMAINS = {
 };
 const PRESENCE_CLASSES = ['occupancy', 'presence', 'motion'];
 const PROVIDERS = { openai: 'OpenAI', xai: 'Grok (xAI)', custom: 'Eigener Server', elevenlabs: 'ElevenLabs' };
+const LIVE = { openai: 'GPT-Live (OpenAI)', xai: 'Grok Voice (xAI)' };
 const WAKE_MODES ={ both: 'Kamera und Präsenzmelder', camera: 'Nur Kamera', sensor: 'Nur Präsenzmelder' };
 
 // Display-Felder: [Schlüssel, Beschriftung, Einheit, Hilfe, min, max, Prozent?]
@@ -215,7 +216,8 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 async function viewOverview() {
   const [st, rooms, tablets] = await Promise.all([api('GET', '/api/status'), api('GET', '/api/rooms'), api('GET', '/api/tablets')]);
   const okDot = (ok, yes, no) => `<span class="dot ${ok ? 'ok' : ''}">${ok ? yes : no}</span>`;
-  const voiceOk = st.voice.stt_ok && st.voice.llm_ok && st.voice.tts_ok;
+  const live = st.voice.mode === 'live';
+  const voiceOk = live ? st.voice.live_ok && (st.voice.live === 'xai' || st.voice.llm_ok) : st.voice.stt_ok && st.voice.llm_ok && st.voice.tts_ok;
   const steps = [
     [st.ha.connected, 'Home Assistant verbinden', '#/einrichtung/1'],
     [voiceOk, 'Sprachassistent einrichten', '#/einrichtung/2'],
@@ -238,6 +240,7 @@ async function viewOverview() {
         <div class="kv"><span>Geräte</span><span>${st.ha.entities ?? '–'}</span></div>
       </a>
       <a class="glass card" href="#/einstellungen/sprache"><h2>Sprachassistent</h2>
+        ${live ? `<div class="kv"><span>Live-Modell</span>${okDot(st.voice.live_ok, LIVE[st.voice.live] || st.voice.live, 'Schlüssel fehlt')}</div>` : ''}
         <div class="kv"><span>Spracherkennung</span>${okDot(st.voice.stt_ok, PROVIDERS[st.voice.stt] || st.voice.stt, 'nicht eingerichtet')}</div>
         <div class="kv"><span>Antworten</span>${okDot(st.voice.llm_ok, PROVIDERS[st.voice.llm] || st.voice.llm, 'nicht eingerichtet')}</div>
         <div class="kv"><span>Stimme</span>${okDot(st.voice.tts_ok, PROVIDERS[st.voice.tts] || st.voice.tts, 'nicht eingerichtet')}</div>
@@ -571,7 +574,7 @@ const FIELDS = {
   ha_url: { label: 'Adresse', type: 'url', placeholder: 'http://192.168.1.10:8123', help: 'So, wie du Home Assistant im Browser aufrufst.' },
   ha_token: { label: 'Langlebiger Zugriffstoken', type: 'secret', help: 'In Home Assistant unten links auf dein Profil → Sicherheit → Langlebige Zugriffstoken → Token erstellen.' },
   openai_api_key: { label: 'OpenAI-Schlüssel', type: 'secret', help: 'Für Spracherkennung, und je nach Auswahl für Antworten und Stimme. platform.openai.com → API keys' },
-  xai_api_key: { label: 'xAI-Schlüssel (Grok)', type: 'secret', help: 'Nur für Antworten mit Grok. console.x.ai → API Keys' },
+  xai_api_key: { label: 'xAI-Schlüssel (Grok)', type: 'secret', help: 'Nur für Grok: Antworten, Stimme, Spracherkennung oder Grok Voice. console.x.ai → API Keys' },
   elevenlabs_api_key: { label: 'ElevenLabs-Schlüssel', type: 'secret', help: 'Nur für die Stimme von ElevenLabs. elevenlabs.io → Profil → API Keys' },
   llm_provider: { label: 'Anbieter', type: 'select', options: { openai: 'OpenAI', xai: 'Grok (xAI)', custom: 'Eigener Server (OpenAI-kompatibel)' } },
   openai_llm_model: { label: 'Modell', list: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'], show: 'llm_provider=openai' },
@@ -579,14 +582,22 @@ const FIELDS = {
   custom_llm_url: { label: 'Adresse des Servers', type: 'url', placeholder: 'http://192.168.1.20:11434/v1', help: 'Zum Beispiel Ollama oder LM Studio. Das Modell muss Werkzeug-Aufrufe (Tools) beherrschen.', show: 'llm_provider=custom' },
   custom_llm_api_key: { label: 'Schlüssel (falls nötig)', type: 'secret', show: 'llm_provider=custom' },
   custom_llm_model: { label: 'Modell', placeholder: 'z. B. qwen2.5:7b', show: 'llm_provider=custom' },
-  stt_provider: { label: 'Anbieter', type: 'select', options: { openai: 'OpenAI' } },
-  stt_model: { label: 'Modell', list: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'whisper-1'] },
+  stt_provider: { label: 'Anbieter', type: 'select', options: { openai: 'OpenAI', xai: 'Grok (xAI)' } },
+  stt_model: { label: 'Modell', list: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'whisper-1'], show: 'stt_provider=openai' },
+  xai_stt_model: { label: 'Modell', list: ['grok-voice-transcribe-2.0'], show: 'stt_provider=xai' },
   stt_language: { label: 'Sprache', type: 'select', options: { de: 'Deutsch', en: 'Englisch', '': 'Automatisch erkennen' } },
-  tts_provider: { label: 'Anbieter', type: 'select', options: { elevenlabs: 'ElevenLabs', openai: 'OpenAI' } },
+  tts_provider: { label: 'Anbieter', type: 'select', options: { elevenlabs: 'ElevenLabs', openai: 'OpenAI', xai: 'Grok (xAI)' } },
+  xai_voice: { label: 'Stimme', voices: 'xai', placeholder: 'eve', help: 'Die Liste erscheint mit dem xAI-Schlüssel. Eigene (geklonte) Stimmen per ID eintragen.', show: 'tts_provider=xai' },
   elevenlabs_voice_id: { label: 'Stimme', type: 'voice', help: 'Nach dem Eintragen des Schlüssels erscheint hier die Liste deiner Stimmen.', show: 'tts_provider=elevenlabs' },
   elevenlabs_model: { label: 'Modell', list: ['eleven_multilingual_v2', 'eleven_flash_v2_5', 'eleven_turbo_v2_5'], help: 'Flash und Turbo antworten schneller, Multilingual klingt am natürlichsten.', show: 'tts_provider=elevenlabs' },
   openai_tts_voice: { label: 'Stimme', type: 'select', options: Object.fromEntries(['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer'].map((v) => [v, v[0].toUpperCase() + v.slice(1)])), show: 'tts_provider=openai' },
   openai_tts_model: { label: 'Modell', list: ['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'], show: 'tts_provider=openai' },
+  voice_mode: { label: 'Betriebsart', type: 'select', options: { pipeline: 'Klassisch: Spracherkennung → Sprachmodell → Stimme', live: 'Live-Sprachmodell: hört und spricht selbst' } },
+  live_provider: { label: 'Live-Modell', type: 'select', options: { openai: 'GPT-Live-1 (OpenAI)', xai: 'Grok Voice 3.0 (xAI)' } },
+  openai_live_model: { label: 'Modell', list: ['gpt-live-1'], show: 'live_provider=openai' },
+  openai_live_voice: { label: 'Stimme', list: ['marin', 'quartz', 'ripple', 'vesper', 'willow', 'stone', 'gleam', 'meridian', 'bossa', 'tempo', 'beacon', 'delta', 'cinder'], help: 'Marin ist der Standard. Alle Stimmen sprechen Deutsch, mit leichtem Akzent ihrer Herkunft (meist englisch, bossa und tempo portugiesisch).', show: 'live_provider=openai' },
+  xai_live_model: { label: 'Modell', list: ['grok-voice-3.0', 'grok-voice-latest'], help: '„latest“ wechselt automatisch auf neue Grok-Voice-Versionen.', show: 'live_provider=xai' },
+  xai_live_voice: { label: 'Stimme', voices: 'xai', placeholder: 'eve', help: 'Die Liste erscheint mit dem xAI-Schlüssel. Eigene (geklonte) Stimmen per ID eintragen.', show: 'live_provider=xai' },
   assistant_instructions: { label: 'Zusätzliche Anweisungen', type: 'textarea', placeholder: 'z. B. Sprich mich mit Du an. Sag nach dem Schalten nur kurz „Erledigt“.', help: 'Wird jedem Gespräch mitgegeben. Gerätegrenzen pro Raum gelten trotzdem.' },
   wake_word: { label: 'Aktivierungswort', placeholder: 'z. B. Computer', help: 'Mehrere mit Komma trennen. Leer = aus. Wird ein deutsches Wort schlecht erkannt, schreib dahinter in Klammern, wie es auf Englisch klingt: Hey Hausgeist (hey house guyst).' },
   wake_sensitivity: { label: 'Empfindlichkeit', type: 'select', options: { niedrig: 'Niedrig (seltener Fehlalarm)', mittel: 'Mittel', hoch: 'Hoch (reagiert leichter)' } },
@@ -608,8 +619,9 @@ function fieldHtml(name, s, showOverride) {
   } else if (f.type === 'textarea') {
     input = `<textarea ${attrs} rows="4" placeholder="${esc(f.placeholder || '')}">${esc(cur.value)}</textarea>`;
   } else {
-    input = `<input type="${f.type === 'url' ? 'url' : 'text'}" ${attrs} value="${esc(cur.value)}" spellcheck="false" placeholder="${esc(f.placeholder || '')}" ${f.list ? `list="l-${name}"` : ''}>
-      ${f.list ? `<datalist id="l-${name}">${f.list.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>` : ''}`;
+    const list = f.list || (f.voices ? [] : null);
+    input = `<input type="${f.type === 'url' ? 'url' : 'text'}" ${attrs} value="${esc(cur.value)}" spellcheck="false" placeholder="${esc(f.placeholder || '')}" ${list ? `list="l-${name}"` : ''} ${f.voices ? `data-voices="${f.voices}"` : ''}>
+      ${list ? `<datalist id="l-${name}">${list.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>` : ''}`;
   }
   const origin = cur.source === 'admin'
     ? `${SOURCE.admin} · <button type="button" class="link" data-reset="${name}">${cur.secret ? 'Entfernen' : 'Zurücksetzen'}</button>`
@@ -634,11 +646,12 @@ function collect(root, s) {
 
 function applyShow(root) {
   for (const el of $$('[data-show]', root)) {
-    el.hidden = !el.dataset.show.split(' ').every((cond) => {
+    // "a=x|y b=z" = alle Bedingungen; mehrere Gruppen mit Komma = eine davon reicht
+    el.hidden = !el.dataset.show.split(',').some((group) => group.trim().split(' ').every((cond) => {
       const [k, vals] = cond.split('=');
       const ctl = $(`[data-key="${k}"]`, root);
       return ctl && vals.split('|').includes(ctl.value);
-    });
+    }));
   }
 }
 
@@ -703,6 +716,19 @@ function bindSettingsForm(root, s, { onSaved, saveBtn } = {}) {
     };
     if (s.elevenlabs_api_key.set) loadVoices();
     $('[data-key="elevenlabs_api_key"]', root)?.addEventListener('change', loadVoices);
+  }
+
+  // Grok-Stimmen als Vorschläge, sobald ein xAI-Schlüssel da ist
+  if ($('[data-voices="xai"]', root)) {
+    const loadXai = async () => {
+      const r = await api('POST', '/api/settings/test/xai_voices', collect(root, s)).catch(() => null);
+      if (!r?.ok) return;
+      for (const el of $$('[data-voices="xai"]', root)) {
+        $(`#l-${el.dataset.key}`, root).innerHTML = r.voices.map((v) => `<option value="${esc(v.voice_id)}" label="${esc(v.name)}${v.description ? ` (${esc(v.description)})` : ''}">`).join('');
+      }
+    };
+    if (s.xai_api_key.set) loadXai();
+    $('[data-key="xai_api_key"]', root)?.addEventListener('change', loadXai);
   }
 
   if (save) {
@@ -805,6 +831,15 @@ async function settingsVoice() {
   const [s, rooms] = await Promise.all([api('GET', '/api/settings'), api('GET', '/api/rooms')]);
   return {
     html: `<form id="form" class="stack">
+      <section class="glass card stack" style="gap:14px"><h2>Betriebsart</h2>
+        ${fields(['voice_mode'], s)}
+        <p class="muted small" style="margin:0" data-show="voice_mode=pipeline">Drei Bausteine nacheinander: Die Aufnahme wird zu Text, ein Sprachmodell antwortet und schaltet Geräte, eine Stimme liest vor. Jeder Baustein ist frei wählbar.</p>
+        <div class="stack" style="gap:14px" data-show="voice_mode=live">
+          <p class="muted small" style="margin:0">Ein Modell hört die Aufnahme direkt und antwortet mit eigener Stimme. Das klingt natürlicher, mit Betonung und ohne Umweg über Text. <b>Grok Voice</b> schaltet Geräte selbst. <b>GPT-Live</b> gibt Gerätebefehle an Hausgeist weiter, dafür braucht es unten das Sprachmodell. Fällt das Live-Modell aus, springt der klassische Weg ein, sofern er eingerichtet ist.</p>
+          ${fields(['live_provider', 'openai_live_model', 'openai_live_voice', 'xai_live_model', 'xai_live_voice'], s)}
+          <div class="row-inline">${testBtn('live', 'Probe anhören')}</div>${testOut('live')}
+        </div>
+      </section>
       <div class="cols">
         <div class="stack">
           <section class="glass card stack" style="gap:14px"><h2>Antworten (Sprachmodell)</h2>
@@ -812,11 +847,11 @@ async function settingsVoice() {
             <div class="row-inline">${testBtn('llm', 'Testen')}</div>${testOut('llm')}
           </section>
           <section class="glass card stack" style="gap:14px"><h2>Stimme</h2>
-            ${fields(['tts_provider', 'elevenlabs_voice_id', 'elevenlabs_model', 'openai_tts_voice', 'openai_tts_model'], s)}
+            ${fields(['tts_provider', 'elevenlabs_voice_id', 'elevenlabs_model', 'openai_tts_voice', 'openai_tts_model', 'xai_voice'], s)}
             <div class="row-inline">${testBtn('tts', 'Probe anhören')}</div>${testOut('tts')}
           </section>
           <section class="glass card stack" style="gap:14px"><h2>Spracherkennung</h2>
-            ${fields(['stt_provider', 'stt_model', 'stt_language'], s)}
+            ${fields(['stt_provider', 'stt_model', 'xai_stt_model', 'stt_language'], s)}
             <div class="row-inline">${testBtn('stt', 'Testen')}</div>${testOut('stt')}
           </section>
         </div>
@@ -986,7 +1021,7 @@ async function viewWizard(stepArg) {
 
   if (step === 2) {
     const s = await api('GET', '/api/settings');
-    const show = { openai_api_key: '', xai_api_key: 'llm_provider=xai', elevenlabs_api_key: 'tts_provider=elevenlabs' };
+    const show = { openai_api_key: '', xai_api_key: 'llm_provider=xai,tts_provider=xai', elevenlabs_api_key: 'tts_provider=elevenlabs' };
     return {
       html: wrap(`<form class="glass card stack" id="form" style="gap:14px">
         <h2>Sprachassistent</h2>
@@ -995,8 +1030,8 @@ async function viewWizard(stepArg) {
         <h2 style="margin-top:8px">Antworten</h2>
         ${fields(['llm_provider', 'xai_api_key', 'custom_llm_url', 'custom_llm_model'], s, show)}
         <h2 style="margin-top:8px">Stimme</h2>
-        ${fields(['tts_provider', 'elevenlabs_api_key', 'elevenlabs_voice_id', 'openai_tts_voice'], s, show)}
-        <p class="muted small" style="margin:0">Modelle und weitere Feinheiten findest du später unter Einstellungen → Sprachassistent.</p>
+        ${fields(['tts_provider', 'elevenlabs_api_key', 'elevenlabs_voice_id', 'openai_tts_voice', 'xai_voice'], s, show)}
+        <p class="muted small" style="margin:0">Modelle, Live-Sprachmodelle (GPT-Live, Grok Voice) und weitere Feinheiten findest du später unter Einstellungen → Sprachassistent.</p>
         ${testOut('llm')}
         ${nav('Speichern und weiter')}</form>`),
       bind(el) {

@@ -13,15 +13,19 @@ class ApiException implements Exception {
 }
 
 class VoiceReply {
-  VoiceReply({required this.reply, this.transcript, this.audio});
+  VoiceReply({required this.reply, this.transcript, this.audio, this.mime = 'audio/mpeg'});
   final String reply;
   final String? transcript;
   final List<int>? audio;
+
+  /// audio/mpeg bei klassischer Stimme, audio/wav bei Live-Sprachmodellen.
+  final String mime;
 
   factory VoiceReply.fromJson(Map<String, dynamic> j) => VoiceReply(
         reply: j['reply'] as String? ?? '',
         transcript: j['transcript'] as String?,
         audio: j['audio_base64'] is String ? base64Decode(j['audio_base64'] as String) : null,
+        mime: j['mime'] as String? ?? 'audio/mpeg',
       );
 }
 
