@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     openai_tts_model: str = "gpt-4o-mini-tts"
     openai_tts_voice: str = "alloy"
     assistant_instructions: str = ""  # zusaetzliche Anweisungen fuer den Sprachassistenten
+    # Aktivierungswort(e), kommagetrennt, optional mit Aussprache in Klammern; leer = aus
+    wake_word: str = "Computer"
+    wake_sensitivity: str = "mittel"  # niedrig | mittel | hoch
 
     db_path: str = "/data/hausgeist.db"
 
@@ -44,7 +47,8 @@ EDITABLE: dict[str, bool] = {
     "llm_provider": False, "openai_llm_model": False, "xai_llm_model": False,
     "custom_llm_url": False, "custom_llm_api_key": True, "custom_llm_model": False,
     "tts_provider": False, "openai_tts_model": False, "openai_tts_voice": False,
-    "assistant_instructions": False, "update_repo": False,
+    "assistant_instructions": False, "wake_word": False, "wake_sensitivity": False,
+    "update_repo": False,
 }
 
 env_settings = Settings()  # nur Container-Variablen bzw. .env, nie veraendert

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/io.dart';
@@ -55,10 +55,11 @@ class Api {
   Future<VoiceReply> voiceText(String text) async =>
       VoiceReply.fromJson(await _json(_http.post(_u('/api/voice/text'), headers: _headers, body: jsonEncode({'text': text}))));
 
-  Future<VoiceReply> voiceAudio(File file) async {
+  /// Sprachbefehl als Audiodatei (z. B. WAV) an Spracherkennung und Assistent.
+  Future<VoiceReply> voiceAudio(Uint8List audio, {String filename = 'befehl.wav'}) async {
     final req = http.MultipartRequest('POST', _u('/api/voice/audio'))
       ..headers['Authorization'] = 'Bearer $token'
-      ..files.add(await http.MultipartFile.fromPath('file', file.path, filename: 'sprache.m4a'));
+      ..files.add(http.MultipartFile.fromBytes('file', audio, filename: filename));
     return VoiceReply.fromJson(await _json(http.Response.fromStream(await _http.send(req))));
   }
 
@@ -70,7 +71,10 @@ class Api {
   /// Close-Code der letzten Live-Verbindung: 4000 = Einstellungen geändert, 4401 = Token ungültig.
   int? get closeCode => _ws?.closeCode;
 
-  /// Live-Ereignisse (`state`, `wake`). Der Stream endet, wenn die Verbindung abbricht.
+  /// Nachricht über die Live-Verbindung an den Server (z. B. `wake_heard`).
+  void send(Map<String, dynamic> msg) => _ws?.sink.add(jsonEncode(msg));
+
+  /// Live-Ereignisse (`state`, `wake`, `wake_result`). Der Stream endet, wenn die Verbindung abbricht.
   /// Der Token geht im Header mit, damit er nicht in Proxy-Logs (URL) landet.
   Stream<Map<String, dynamic>> events() {
     final ws = base.replace(scheme: base.scheme == 'https' ? 'wss' : 'ws', path: '${base.path}/ws');

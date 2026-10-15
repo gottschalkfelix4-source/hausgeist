@@ -104,6 +104,9 @@ select option{color:#000}
 .dot.warn:before{background:var(--acc)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .chip{background:var(--field);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--muted)}
+button.chip{border:0;font:inherit;font-size:12px;cursor:pointer}
+button.chip:hover{color:var(--text);background:var(--acc-soft, var(--field))}
+#wake-suggest{margin-top:-4px}
 .error{color:#ffc2bb;margin:0}
 .empty{color:var(--muted);text-align:center;padding:28px 12px}
 

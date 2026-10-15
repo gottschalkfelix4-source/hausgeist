@@ -58,7 +58,7 @@ jobs:
             echo "HAUSGEIST_KEY_ALIAS=hausgeist"
           } >> "$GITHUB_ENV"
 
-      - run: flutter build apk --release
+      - run: flutter build apk --release --target-platform android-arm,android-arm64
       - run: mv build/app/outputs/flutter-apk/app-release.apk "build/hausgeist-${{ steps.version.outputs.version }}.apk"
       - run: rm -f "$RUNNER_TEMP/hausgeist.jks"
         if: always()

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../display/display_controller.dart';
+import '../voice/wake_word.dart';
 import 'api.dart';
 import 'demo.dart';
 import 'device.dart';
@@ -22,6 +23,10 @@ class HomeStore extends ChangeNotifier {
   List<Device> devices = [];
   bool connected = false;
   String? error;
+
+  /// Aktivierungswort für dieses Tablet (ändert sich, wenn es in der Verwaltung geändert wird).
+  WakeConfig wake = WakeConfig.off;
+  final _wakeResults = StreamController<Map<String, dynamic>>.broadcast();
 
   /// Neuere App-Version auf GitHub (`version`, `apk_url`), sonst null.
   Map<String, dynamic>? update;
@@ -87,6 +92,22 @@ class HomeStore extends ChangeNotifier {
     devices = list;
     final disp = me['display'];
     if (disp is Map) onDisplaySettings?.call(DisplaySettings.fromJson(disp.cast<String, dynamic>()));
+    final w = me['wake'];
+    wake = w is Map ? WakeConfig.fromJson(w.cast<String, dynamic>()) : WakeConfig.off;
+  }
+
+  /// Dieses Tablet hat das Aktivierungswort gehört. Der Server entscheidet, welches Tablet
+  /// antwortet, wenn es mehrere gehört haben. Ohne Verbindung oder Antwort antwortet es selbst.
+  Future<bool> mayAnswer({required double level, required bool presence, required bool near}) async {
+    if (demo || !connected) return true;
+    final id = '${DateTime.now().microsecondsSinceEpoch}';
+    final result = _wakeResults.stream.firstWhere((m) => m['id'] == id);
+    try {
+      api!.send({'type': 'wake_heard', 'id': id, 'level': level, 'presence': presence, 'near': near});
+      return (await result.timeout(const Duration(milliseconds: 1500)))['accept'] == true;
+    } catch (_) {
+      return true;
+    }
   }
 
   /// Höchstens alle 12 Stunden nachsehen, ob es eine neuere App gibt.
@@ -110,6 +131,8 @@ class HomeStore extends ChangeNotifier {
     switch (m['type']) {
       case 'wake':
         onWake?.call();
+      case 'wake_result':
+        _wakeResults.add(m);
       case 'state':
         final s = (m['state'] as Map).cast<String, dynamic>();
         final id = s['entity_id'] as String;
@@ -306,6 +329,7 @@ class HomeStore extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _events?.cancel();
+    _wakeResults.close();
     for (final t in _deferTimers.values) {
       t.cancel();
     }

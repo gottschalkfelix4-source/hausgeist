@@ -137,6 +137,10 @@ class HomeAssistant:
             return list(self._cache.values())
         return await self._fetch_states()
 
+    def cached_state(self, entity_id: str) -> str | None:
+        """Letzter bekannter Zustand ohne Anfrage (None, wenn unbekannt oder nicht verbunden)."""
+        return self._cache.get(entity_id, {}).get("state") if self.connected else None
+
     async def state(self, entity_id: str) -> dict:
         r = await self.http.get(f"/api/states/{entity_id}")
         r.raise_for_status()

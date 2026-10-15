@@ -40,22 +40,6 @@ class HomeScreen extends StatelessWidget {
                   ]),
                 ]),
               ),
-              if (voice.bubble != null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 84,
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 560),
-                      child: Glass(
-                        color: const Color(0x55000000),
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                        child: Text(voice.bubble!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 15)),
-                      ),
-                    ),
-                  ),
-                ),
             ]),
           ),
         ),
@@ -314,26 +298,27 @@ class _MicButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final listening = voice.phase == VoicePhase.listening;
+    final active = voice.phase != VoicePhase.idle;
+    final words = voice.wakeActive ? voice.wakeWords : const <String>[];
+    final label = words.isEmpty ? 'Tippen zum Sprechen' : 'Sag „${words.first}“ oder tippe';
     return Semantics(
       button: true,
-      label: 'Sprachassistent. Halten zum Sprechen, antippen zum Schreiben.',
+      label: 'Sprachassistent. Antippen zum Sprechen, lange drücken zum Schreiben.',
       child: GestureDetector(
-        onTap: () => _typeText(context),
-        onLongPressStart: (_) => voice.startListening(),
-        onLongPressEnd: (_) => voice.stopListening(),
+        onTap: voice.activate,
+        onLongPress: () => _typeText(context),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           decoration: BoxDecoration(
-            color: listening ? Colors.white : Palette.of(context).glass,
+            color: active ? Colors.white : Palette.of(context).glass,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.mic_none_rounded, size: 20, color: listening ? const Color(0xFFFF3B30) : Palette.acc),
+            Icon(words.isEmpty ? Icons.mic_none_rounded : Icons.graphic_eq_rounded,
+                size: 20, color: active ? const Color(0xFFFF3B30) : Palette.acc),
             const SizedBox(width: 10),
-            Text(listening ? 'Loslassen zum Senden' : 'Halten zum Sprechen oder tippen',
-                style: TextStyle(fontSize: 14, color: listening ? const Color(0xFF1D1D1F) : null)),
+            Text(label, style: TextStyle(fontSize: 14, color: active ? const Color(0xFF1D1D1F) : null)),
           ]),
         ),
       ),

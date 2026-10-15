@@ -129,6 +129,38 @@ und alle Tablets mit `4000` neu geladen. Passwort und Sitzungen sind nicht Teil 
 **Datenbank:** SQLite im WAL-Modus, eine Verbindung pro Thread (`db.conn()`), weil FastAPI normale
 Endpunkte parallel im Threadpool ausführt.
 
+## Aktivierungswort und Sprach-Kugel
+**Erkennung auf dem Tablet:** `lib/voice/wake_word.dart` startet in einem eigenen Isolate einen
+`KeywordSpotter` von sherpa-onnx (Modell `sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01`, int8,
+englisch, Apache-2.0, liegt in `app/assets/kws/`). Das Mikrofon läuft dauerhaft als PCM-Strom (16 kHz,
+mono, `AndroidAudioSource.voiceRecognition`, Echo-Unterdrückung an). Solange nichts los ist, gehen die
+Samples nur an den Erkenner, nichts verlässt das Gerät.
+
+**Zerlegung auf dem Server:** Der Erkenner braucht die Wörter als Tokens des Modells. `app/voice/wakeword.py`
+zerlegt sie mit dem Vokabular des Modells (`kws_vocab.txt`, Unigram mit Viterbi, identisch zu SentencePiece)
+und liefert über `/api/me` fertige Zeilen wie `▁COMP U TER #0.2 @Computer`. Umlaute werden zu AE/OE/UE/SS,
+eine Aussprache in Klammern ersetzt die Schreibweise. Empfindlichkeit: niedrig 0.30, mittel 0.20, hoch 0.12
+(Schwelle des Erkenners). Ändert sich Wort oder Empfindlichkeit, lädt der Server alle Tablets neu (`4000`).
+
+**Wer antwortet?** Nach einer Erkennung schickt das Tablet über den WebSocket
+`{"type":"wake_heard","id","level","presence","near"}`. `level` ist der lauteste Pegel der letzten
+Sekunde in dBFS, `presence`/`near` kommen aus der Display-Logik (Kamera oder Berührung in den letzten
+45 s bzw. 15 s). Der `Hub` sammelt Meldungen 0,35 s lang, oder bis alle Tablets mit Aktivierungswort
+gemeldet haben, und entscheidet nach `(jemand da (auch Präsenzmelder des Raums), direkt davor, Pegel)`.
+Jedes Tablet bekommt `{"type":"wake_result","id","accept"}`. Meldungen bis 2 s nach der Entscheidung
+gehören zum selben Ruf und werden abgelehnt. Ohne Verbindung oder nach 1,5 s ohne Antwort antwortet das
+Tablet selbst.
+
+**Aufnahme:** Was zwischen Erkennung und Entscheidung gesagt wird, wird gepuffert und zählt mit. Ein
+Pegel-Endpunkt (`audio_tools.dart`, Grundrauschen adaptiv, Sprache = 9 dB darüber) beendet die Aufnahme
+nach 0,9 s Pause, nach 5 s ohne Sprache oder nach 12 s. Der eigene Signalton zählt nicht. Die Aufnahme
+geht als WAV an `POST /api/voice/audio`.
+
+**Kugel:** `lib/voice/voice_orb.dart` legt sich über alles (auch über den schwarzen Vorhang). Unscharfer
+Hintergrund, vier Farbflecken (Bernstein, Koralle, Violett, Cyan) mit additiver Überblendung in einem
+weich wabernden Umriss. Beim Zuhören folgt sie dem Mikrofonpegel, beim Nachdenken kreist ein Lichtbogen,
+beim Antworten pulsiert sie. Phasen: `idle → waiting → listening → thinking → speaking → done`.
+
 ## App-Updates
 `GET /api/app/update` liefert das neueste GitHub-Release aus `UPDATE_REPO` (Version, APK-Link).
 Es wird 6 Stunden gecacht, nach einem Fehler 1 Stunde. Die App fragt höchstens alle 12 Stunden,
@@ -139,8 +171,10 @@ sind, installiert Android sie als Update.
 ## Tests
 - `backend/tests/`: pytest mit einer Attrappe von Home Assistant. Getestet werden Ersteinrichtung, Anmeldung, Einstellungen, Sicherung, Räume, Bereichs-Import,
   Tablets, Kopplung (einmalig, Ablauf, Sperre), Raum-Grenzen bei Befehlen, WebSocket-Anmeldung und
-  -Neuladen, Werkzeug-Aufrufe des Sprachassistenten und sein Gedächtnis.
-- `app/test/`: Display-Logik, Gerätemodell, Oberfläche im Demo-Modus, Einrichtung, Versionsvergleich.
+  -Neuladen, Werkzeug-Aufrufe des Sprachassistenten und sein Gedächtnis, Zerlegung des Aktivierungsworts
+  (gegen SentencePiece) und die Wahl des antwortenden Tablets.
+- `app/test/`: Display-Logik, Gerätemodell, Oberfläche im Demo-Modus, Einrichtung, Versionsvergleich,
+  Audio-Bausteine (PCM, Pegel, Ende der Aufnahme, WAV) und die Sprach-Kugel im Demo-Ablauf.
 - CI: `docker.yml` testet den Server vor dem Image-Bau. `app.yml` testet die App, baut die signierte
   APK und hängt sie bei Tags `v*` ans Release.
 
@@ -162,9 +196,10 @@ sind, installiert Android sie als Update.
 | `GET/POST /api/tablets`, `PATCH/DELETE /api/tablets/{id}` | Admin | Tablets |
 | `POST /api/tablets/{id}/pair`, `/token`; `PUT /api/tablets/{id}/display` | Admin | Code, Token, Display |
 | `POST /api/pair` | Kopplungscode | Token abholen |
-| `GET /api/me`, `GET /api/app/update` | Tablet-Token | Raum + Geräte, App-Update |
+| `GET /api/wake/preview?word=&sensitivity=` | Admin | Zerlegung eines Aktivierungsworts |
+| `GET /api/me`, `GET /api/app/update` | Tablet-Token | Raum, Geräte, Aktivierungswort; App-Update |
 | `POST /api/entities/{id}/command` | Tablet-Token | Gerät steuern (nur eigener Raum) |
-| `WS /ws` (Header `Authorization`) | Tablet-Token | Live-Zustände, Aufwecken, Neuladen |
+| `WS /ws` (Header `Authorization`) | Tablet-Token | Live-Zustände, Aufwecken, Neuladen, `wake_heard`/`wake_result` |
 | `POST /api/voice/text`, `/api/voice/audio` | Tablet-Token | Sprachassistent |
 
 ## Starten
@@ -181,12 +216,13 @@ Flutter, nur Android. Aufbau:
 - `lib/display/`: Display-Logik (reines Dart, getestet), Kamera-Bewegung und Android-Anbindung.
 - `lib/ui/`: Design „Home Original“, Kacheln mit Wisch-Dimmen, Detail-Fenster (Licht, Klima,
   Rollo, Medien) und Setup.
-- `lib/voice/`: Mikro halten = sprechen, Mikro tippen = schreiben.
+- `lib/voice/`: Aktivierungswort (sherpa-onnx im Isolate), Mikrofon-Strom, Ende der Aufnahme, Sprach-Kugel.
+  Mikro tippen = sprechen, lange drücken = schreiben.
 
 ```
 cd app
-flutter test                 # Display-Logik, Gerätemodell, Oberfläche
-flutter build apk --release  # -> build/app/outputs/flutter-apk/app-release.apk
+flutter test                 # Display-Logik, Gerätemodell, Oberfläche, Audio, Sprach-Kugel
+flutter build apk --release --target-platform android-arm,android-arm64  # -> build/app/outputs/flutter-apk/app-release.apk
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
 Beim ersten Start gibt man Server-URL und Kopplungscode ein (unter „Erweitert“ auch direkt den Token)
@@ -202,5 +238,5 @@ Pub-Cache (C:) auf verschiedenen Laufwerken liegen.
 2. ✅ Flutter-Tablet-App (Kachel-UI im Apple-Home-Stil, Kiosk-Modus, Display-Logik, Sprache)
 3. ✅ Web-Verwaltung, HA-Bereiche importieren, Kopplung per Code
 4. ✅ Signierte Releases, Update-Hinweis, Tests in der CI
-5. Wake-Word und gestreamte Sprache mit niedriger Latenz. Das passiert größtenteils auf dem Tablet
-   und braucht Tests auf echter Hardware.
+5. ✅ Aktivierungswort offline auf dem Tablet, Wahl des nächsten Tablets, Sprach-Kugel
+6. Antwort gestreamt abspielen, während sie noch erzeugt wird (niedrigere Latenz)

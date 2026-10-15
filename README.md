@@ -47,7 +47,7 @@ Das Display bleibt immer bereit. Es wird hell, sobald jemand davor steht, und du
 | 💡 **Licht** | Ein/aus, Helligkeit per Wischen über die Kachel, Farbrad, Weißtöne in Kelvin, Favoriten. |
 | ❄️ **Klima** | Drehregler für die Zieltemperatur, Modi (Kühlen, Heizen, Automatik, Entfeuchten, Lüften), Lüfterstufe, Lamellen, Eco. |
 | 🪟 **Rollos, Musik, Szenen, Schlösser** | Position, Lautstärke und Titel, Szenen per Tipp, Türschloss. |
-| 🗣️ **Sprachassistent** | Mikro halten und sprechen oder antippen und schreiben. Spracherkennung mit OpenAI, Sprachmodell OpenAI, Grok (xAI) oder ein eigenes wie Ollama, Antwortstimme mit ElevenLabs oder OpenAI. Er merkt sich die letzten Sätze, „und jetzt etwas dunkler“ funktioniert also. |
+| 🗣️ **Sprachassistent** | Einfach „Computer“ sagen (das Wort ist frei wählbar) oder aufs Mikro tippen. Eine leuchtende Kugel zeigt, dass zugehört wird, und bewegt sich mit der Stimme. Hören mehrere Tablets den Ruf, antwortet nur das, bei dem gerade jemand ist. Das Aktivierungswort erkennt das Tablet selbst, ohne Internet. Spracherkennung mit OpenAI, Sprachmodell OpenAI, Grok (xAI) oder ein eigenes wie Ollama, Antwortstimme mit ElevenLabs oder OpenAI. Er merkt sich die letzten Sätze, „und jetzt etwas dunkler“ funktioniert also. |
 | 👋 **Wird hell bei Annäherung** | Die Frontkamera erkennt, wenn jemand vor das Tablet tritt. Antippen ist nicht nötig. Wer hinten im Raum vorbeigeht, weckt es nicht. |
 | 🌙 **Blendet nicht** | Die Helligkeit folgt dem Raumlicht. Nachts gibt es eine Obergrenze und ein dunkles Design. |
 | 🔁 **Live** | Änderungen aus Home Assistant erscheinen sofort, nach einem Verbindungsabbruch verbindet sich die App selbst neu. |
@@ -59,8 +59,10 @@ Das Display bleibt immer bereit. Es wird hell, sobald jemand davor steht, und du
 | Licht mit Weißtönen | Farblicht |
 |---|---|
 | ![Licht](docs/screenshots/03-licht.png) | ![Farblicht](docs/screenshots/05-farblicht.png) |
-| **Klimaanlage** | **Sprachassistent** |
-| ![Klima](docs/screenshots/04-klima.png) | ![Sprache](docs/screenshots/06-sprache.png) |
+| **Sprachassistent hört zu** | **… und antwortet** |
+| ![Zuhören](docs/screenshots/14-zuhoeren.png) | ![Antwort](docs/screenshots/06-sprache.png) |
+| **Klimaanlage** | |
+| ![Klima](docs/screenshots/04-klima.png) | |
 | **Einrichtung mit Kopplungscode** | **Nachts** |
 | ![Einrichtung](docs/screenshots/01-einrichtung.png) | ![Nacht](docs/screenshots/11-nacht.png) |
 | **Hochformat** | |
@@ -163,8 +165,10 @@ Geräte eines Raums änderst du später unter **Räume**: Raum öffnen, Geräte 
 | Symbol antippen | Gerät ein oder aus |
 | Kachel antippen | Detailfenster (Farbe, Modus, Lüfter, …) |
 | Waagerecht über die Kachel wischen | Helligkeit oder Rollo-Position |
-| Mikro gedrückt halten | Sprechen |
-| Mikro kurz antippen | Befehl eintippen |
+| Aktivierungswort sagen (z. B. „Computer“) | Sprechen, die Kugel öffnet sich |
+| Mikro antippen | Sprechen ohne Aktivierungswort |
+| Mikro lange drücken | Befehl eintippen |
+| Kugel antippen / ✕ | Sofort abschicken / abbrechen |
 | Lange auf die Uhr drücken | Einrichtung |
 
 Raum, Geräte und Display-Einstellungen änderst du in der Verwaltung. Die Tablets übernehmen das sofort, ohne Neustart.
@@ -192,7 +196,7 @@ die APK im Browser, danach die Datei öffnen und installieren. Kopplung und Eins
 | **Räume** | Bereiche aus Home Assistant übernehmen, Räume anlegen, umbenennen, löschen. Geräte per Suche und Häkchen zuordnen. Präsenzmelder wählen. |
 | **Tablets** | Tablets anlegen und einem Raum zuweisen, auch mehrere pro Raum. Kopplungscode erzeugen, Token erneuern, Tablet entfernen. Display-Verhalten pro Tablet einstellen. |
 | **Einstellungen → Home Assistant** | Adresse und Token ändern und testen. Hausgeist verbindet sich nach dem Speichern sofort neu, ohne Neustart. |
-| **Einstellungen → Sprachassistent** | Sprachmodell, Stimme, Spracherkennung, API-Schlüssel und eigene Anweisungen an den Assistenten. Jeder Dienst hat einen **Testen**-Knopf, ElevenLabs-Stimmen lassen sich aus deinem Konto auswählen und probehören. Unter **Ausprobieren** schickst du einen Befehl wie vom Tablet eines Raums. |
+| **Einstellungen → Sprachassistent** | Sprachmodell, Stimme, Spracherkennung, API-Schlüssel und eigene Anweisungen an den Assistenten. Jeder Dienst hat einen **Testen**-Knopf, ElevenLabs-Stimmen lassen sich aus deinem Konto auswählen und probehören. Unter **Ausprobieren** schickst du einen Befehl wie vom Tablet eines Raums. Dort stellst du auch das **Aktivierungswort** und seine Empfindlichkeit ein. |
 | **Einstellungen → System** | Update-Quelle, Sicherung herunterladen und wiederherstellen, Passwort ändern. |
 
 <p align="center">
@@ -239,7 +243,7 @@ wird dunkel. Alle Werte lassen sich pro Tablet in der Verwaltung unter **Tablets
 ## Sprachassistent
 
 ```
-Tablet ── Audio (m4a) ──► Server ── STT (OpenAI) ──► LLM (OpenAI | Grok) ──► Werkzeug control_device
+Tablet ── Audio (WAV) ──► Server ── STT (OpenAI) ──► LLM (OpenAI | Grok) ──► Werkzeug control_device
                                                                      │
 Tablet ◄── Antwort + Audio ◄── TTS (ElevenLabs | OpenAI) ◄───────────┘
 ```
@@ -258,6 +262,37 @@ Anbieter, Modelle und Stimme stellst du in der Verwaltung unter *Einstellungen �
 
 Unter **Persönlichkeit** kannst du dem Assistenten zusätzliche Anweisungen geben, etwa *„Duze mich und antworte
 in einem Satz.“* Die Regeln zur Gerätesteuerung bleiben davon unberührt.
+
+### Aktivierungswort
+
+Jedes Tablet hört ständig auf das Aktivierungswort, **ohne Internet und ohne Server**. Das erledigt ein kleines
+Offline-Modell ([sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), 3,3 Mio. Parameter). Erst danach wird
+aufgenommen. Die Aufnahme endet, sobald du eine knappe Sekunde nichts mehr sagst, und geht dann an den Server.
+„Computer, mach das Licht an“ in einem Satz funktioniert auch.
+
+**Welches Tablet antwortet?** Hören mehrere Tablets denselben Ruf, melden sie ihn dem Server. Der wartet einen
+Augenblick (0,35 s) und lässt nur eins antworten:
+
+1. das Tablet, bei dem gerade jemand ist: Die Kamera hat jemanden gesehen, das Tablet wurde berührt oder der
+   Präsenzmelder des Raums meldet jemanden,
+2. darunter bevorzugt eins, vor dem jemand direkt steht,
+3. sonst das, bei dem der Ruf am lautesten ankam.
+
+<p align="center">
+  <img src="docs/screenshots/15-aktivierungswort.png" alt="Aktivierungswort in der Verwaltung" width="100%">
+</p>
+
+Eingestellt wird das in der Verwaltung unter *Einstellungen → Sprachassistent → Aktivierungswort*:
+
+- **Wort:** Vorschläge sind *Computer*, *Alexa*, *Jarvis* und *Hey Hausgeist*. Mehrere Wörter trennst du mit Komma,
+  leer schaltet die Funktion ab. Die Verwaltung zeigt, wie das Tablet das Wort zerlegt.
+- **Eigene deutsche Wörter:** Das Modell kennt englische Laute. Wird ein Wort schlecht erkannt, schreib dahinter in
+  Klammern, wie es auf Englisch klingt: `Hey Hausgeist (hey house guyst)`.
+- **Empfindlichkeit:** *Hoch* reagiert auch leise und von weiter weg, löst aber öfter versehentlich aus.
+- **Pro Tablet** lässt es sich unter *Tablets → Display* abschalten („Auf das Aktivierungswort hören“).
+
+Gut zu wissen: Steckt das Wort in einem längeren Wort („Computerspiel“), kann es ebenfalls auslösen.
+Kurze, ungewöhnliche Wörter mit zwei bis drei Silben funktionieren am besten.
 
 ## Konfiguration
 
@@ -328,9 +363,10 @@ Sicherheit im Überblick:
 | `POST /api/tablets/{id}/pair`, `POST /api/tablets/{id}/token` | `x-admin-key` | Neuer Kopplungscode, Token erneuern |
 | `PUT /api/tablets/{id}/display` | `x-admin-key` | Display-Verhalten pro Tablet |
 | `POST /api/pair` | Kopplungscode | Liefert den Token für die App |
-| `GET /api/me` | Tablet-Token | Raum, Geräte und Display-Einstellungen |
+| `GET /api/wake/preview?word=` | `x-admin-key` | Zeigt, wie ein Aktivierungswort für das Tablet zerlegt wird |
+| `GET /api/me` | Tablet-Token | Raum, Geräte, Display-Einstellungen und Aktivierungswort |
 | `POST /api/entities/{id}/command` | Tablet-Token | Gerät steuern (nur im eigenen Raum) |
-| `WS /ws` | Tablet-Token im Header | Live-Zustände und Aufwecken |
+| `WS /ws` | Tablet-Token im Header | Live-Zustände, Aufwecken, Wahl des antwortenden Tablets (`wake_heard` → `wake_result`) |
 | `POST /api/voice/text`, `/api/voice/audio` | Tablet-Token | Sprachassistent |
 | `GET /api/app/update` | Tablet-Token | Neueste App-Version |
 | `GET /health` | – | Status |
@@ -362,7 +398,7 @@ Die Verwaltung (`backend/app/admin/`) ist reines HTML, CSS und JavaScript ohne B
 ```bash
 cd app
 flutter test                  # Display-Logik, Gerätemodell, Oberfläche
-flutter build apk --release   # build/app/outputs/flutter-apk/app-release.apk
+flutter build apk --release --target-platform android-arm,android-arm64   # build/app/outputs/flutter-apk/app-release.apk
 ```
 
 Die Display-Logik (`app/lib/display/display_controller.dart`) ist reines Dart und vollständig getestet.
@@ -380,8 +416,9 @@ Den Schlüssel bekommt sie aus den Secrets `HAUSGEIST_KEYSTORE_BASE64` und `HAUS
 
 - **Kamera:** Die Bilder werden nur im Arbeitsspeicher des Tablets auf ein 32×24-Raster verkleinert
   und verglichen. Sie werden nie gespeichert oder verschickt.
-- **Sprache:** Aufnahmen gehen an deinen Server und von dort an die gewählten Anbieter (OpenAI, xAI, ElevenLabs).
-  Ohne API-Keys ist der Sprachassistent aus.
+- **Sprache:** Auf das Aktivierungswort hört das Tablet selbst, dabei verlässt nichts das Gerät. Erst nach dem
+  Aktivierungswort (oder dem Tippen aufs Mikro) wird aufgenommen. Diese Aufnahme geht an deinen Server und von
+  dort an die gewählten Anbieter (OpenAI, xAI, ElevenLabs). Ohne API-Keys ist der Sprachassistent aus.
 - **Keine Cloud nötig** für die Gerätesteuerung: Tablets, Server und Home Assistant reden nur im Heimnetz.
 
 ## Roadmap
@@ -394,7 +431,8 @@ Den Schlüssel bekommt sie aus den Secrets `HAUSGEIST_KEYSTORE_BASE64` und `HAUS
 - [x] Bereiche aus Home Assistant automatisch als Räume übernehmen
 - [x] Koppeln per Code, signierte Releases, Update-Hinweis in der App
 - [x] Gesprächsgedächtnis für den Sprachassistenten
-- [ ] Wake-Word („Hey Hausgeist“) und gestreamte Sprache
+- [x] Aktivierungswort (frei wählbar, offline) mit Wahl des nächsten Tablets und animierter Sprach-Kugel
+- [ ] Antwort gestreamt abspielen, während sie noch erzeugt wird
 
 ## Lizenz
 

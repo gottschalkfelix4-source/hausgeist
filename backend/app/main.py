@@ -16,8 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from . import __version__, auth, config, db, updates
 from .config import EDITABLE, settings
 from .ha import ha
-from .hub import hub
-from .voice import pipeline, providers
+from .hub import PRESENT_STATES, hub
+from .voice import pipeline, providers, wakeword
 
 logging.basicConfig(level=logging.INFO)
 
@@ -29,9 +29,16 @@ async def lifespan(_: FastAPI):
     db.conn()
     config.apply(db.get_settings())
     await ha.reconfigure()
+    hub.occupied = room_occupied
     task = asyncio.create_task(ha.listen(hub.on_state_changed))
     yield
     task.cancel()
+
+
+def room_occupied(room_id: str | None) -> bool:
+    """Praesenzmelder des Raums meldet gerade jemanden (fuer die Wahl des antwortenden Tablets)."""
+    row = db.conn().execute("SELECT presence_entity FROM rooms WHERE id=?", (room_id,)).fetchone() if room_id else None
+    return bool(row and row["presence_entity"]) and ha.cached_state(row["presence_entity"]) in PRESENT_STATES
 
 
 app = FastAPI(title="Hausgeist", version=__version__, lifespan=lifespan)
@@ -180,6 +187,8 @@ class SettingsPatch(BaseModel):
     openai_tts_model: str | None = Field(None, max_length=100)
     openai_tts_voice: str | None = Field(None, max_length=50)
     assistant_instructions: str | None = Field(None, max_length=4000)
+    wake_word: str | None = Field(None, max_length=300)
+    wake_sensitivity: Literal["niedrig", "mittel", "hoch"] | None = None
     update_repo: str | None = Field(None, pattern=r"^$|^[\w.-]+/[\w.-]+$", max_length=200)
 
     @field_validator("*", mode="before")
@@ -217,6 +226,8 @@ async def put_settings(body: SettingsPatch):
         await ha.reconfigure()
     if "update_repo" in changes:
         updates.clear()
+    if {"wake_word", "wake_sensitivity"} & changes.keys():
+        await hub.reload_all()  # Tablets holen das neue Aktivierungswort
     return _settings_view()
 
 
@@ -580,6 +591,7 @@ class Display(BaseModel):
     night_start: int = Field(22, ge=0, le=23)
     night_end: int = Field(6, ge=0, le=23)
     night_max_brightness: float = Field(0.15, ge=0, le=1)
+    voice_wake: bool = True  # hoert auf das Aktivierungswort
 
 
 def display_settings(tab) -> dict:
@@ -622,7 +634,23 @@ async def me(tab=Depends(tablet)):
     ids = set(db.room_entity_ids(tab["room_id"])) if room else set()
     states = [s for s in await ha.states() if s["entity_id"] in ids]
     return {"tablet": tab["name"], "room": dict(room) if room else None, "entities": states,
-            "display": display_settings(tab), "server_version": __version__}
+            "display": display_settings(tab), "wake": wake_config(tab), "server_version": __version__}
+
+
+def wake_config(tab) -> dict:
+    """Aktivierungswort fuer die App: fertige Zeilen fuer den Offline-Erkenner (sherpa-onnx)."""
+    words = wakeword.parse_words(settings.wake_word)
+    return {"enabled": bool(words) and display_settings(tab)["voice_wake"],
+            "words": [name for name, _ in words],
+            "keywords": wakeword.keywords(settings.wake_word, settings.wake_sensitivity)}
+
+
+@app.get("/api/wake/preview", dependencies=[Depends(admin)])
+def wake_preview(word: str = "", sensitivity: str = "mittel"):
+    """Verwaltung: wie der Erkenner die eingegebenen Woerter zerlegt."""
+    return {"words": [{"name": name, "spoken": spoken, "tokens": wakeword.tokens(spoken)}
+                      for name, spoken in wakeword.parse_words(word[:300])],
+            "suggestions": wakeword.SUGGESTIONS}
 
 
 @app.get("/api/app/update")
@@ -656,10 +684,15 @@ async def ws_endpoint(ws: WebSocket, token: str = ""):
     if not row:
         await ws.close(code=4401)
         return
-    await hub.add(ws, row["id"], row["room_id"], display_settings(row)["wake_mode"])
+    await hub.add(ws, row["id"], row["room_id"], display_settings(row)["wake_mode"], wake_config(row)["enabled"])
     try:
         while True:
-            await ws.receive_text()
+            try:
+                msg = json.loads(await ws.receive_text())
+            except ValueError:
+                continue
+            if isinstance(msg, dict):
+                await hub.on_message(ws, msg)
     except WebSocketDisconnect:
         hub.remove(ws)
 

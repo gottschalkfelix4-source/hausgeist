@@ -30,6 +30,7 @@ const DISPLAY_FIELDS = [
 const DISPLAY_DEFAULTS = {
   wake_mode: 'both', dim_after: 30, sleep_after: 120, presence_hold: 90, near_motion_area: 0.2,
   min_brightness: 0.02, max_brightness: 1, idle_factor: 0.35, night_start: 22, night_end: 6, night_max_brightness: 0.15,
+  voice_wake: true,
 };
 
 // ---------- API ----------
@@ -508,6 +509,8 @@ async function viewTablet(id) {
               <select name="wake_mode">${Object.entries(WAKE_MODES).map(([v, l]) => `<option value="${v}" ${v === disp.wake_mode ? 'selected' : ''}>${l}</option>`).join('')}</select>
               <small>Kamera: Bewegung vor dem Tablet. Präsenzmelder: der Melder des Raums.</small></label>
             <div class="form-grid">${DISPLAY_FIELDS.map(field).join('')}</div>
+            <label class="check" style="margin-top:16px"><input type="checkbox" name="voice_wake" ${disp.voice_wake ? 'checked' : ''}> Auf das Aktivierungswort hören</label>
+            <small class="muted small" style="display:block;margin:4px 0 0 28px">Wort und Empfindlichkeit unter <a href="#/einstellungen/sprache">Einstellungen → Sprachassistent</a></small>
             <div class="row-inline" style="justify-content:flex-end;margin-top:16px">
               <button type="button" class="btn" id="defaults">Standardwerte</button><button class="btn primary">Speichern</button></div>
           </form>
@@ -529,7 +532,7 @@ async function viewTablet(id) {
       const form = $('#display', el);
       form.onsubmit = async (e) => {
         e.preventDefault();
-        const body = { wake_mode: form.wake_mode.value };
+        const body = { wake_mode: form.wake_mode.value, voice_wake: form.voice_wake.checked };
         for (const [k, , , , , , pct] of DISPLAY_FIELDS) body[k] = pct ? Number(form[k].value) / 100 : Number(form[k].value);
         if (body.sleep_after <= body.dim_after) return toast('„Ausschalten nach“ sollte länger sein als „Dimmen nach“.', true);
         if (body.min_brightness > body.max_brightness) return toast('Mindesthelligkeit ist größer als die Höchsthelligkeit.', true);
@@ -537,6 +540,7 @@ async function viewTablet(id) {
       };
       $('#defaults', el).onclick = () => {
         form.wake_mode.value = DISPLAY_DEFAULTS.wake_mode;
+        form.voice_wake.checked = DISPLAY_DEFAULTS.voice_wake;
         for (const [k, , , , , , pct] of DISPLAY_FIELDS) form[k].value = pct ? Math.round(DISPLAY_DEFAULTS[k] * 100) : DISPLAY_DEFAULTS[k];
       };
       $('#general', el).onsubmit = async (e) => {
@@ -584,6 +588,8 @@ const FIELDS = {
   openai_tts_voice: { label: 'Stimme', type: 'select', options: Object.fromEntries(['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer'].map((v) => [v, v[0].toUpperCase() + v.slice(1)])), show: 'tts_provider=openai' },
   openai_tts_model: { label: 'Modell', list: ['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'], show: 'tts_provider=openai' },
   assistant_instructions: { label: 'Zusätzliche Anweisungen', type: 'textarea', placeholder: 'z. B. Sprich mich mit Du an. Sag nach dem Schalten nur kurz „Erledigt“.', help: 'Wird jedem Gespräch mitgegeben. Gerätegrenzen pro Raum gelten trotzdem.' },
+  wake_word: { label: 'Aktivierungswort', placeholder: 'z. B. Computer', help: 'Mehrere mit Komma trennen. Leer = aus. Wird ein deutsches Wort schlecht erkannt, schreib dahinter in Klammern, wie es auf Englisch klingt: Hey Hausgeist (hey house guyst).' },
+  wake_sensitivity: { label: 'Empfindlichkeit', type: 'select', options: { niedrig: 'Niedrig (seltener Fehlalarm)', mittel: 'Mittel', hoch: 'Hoch (reagiert leichter)' } },
   update_repo: { label: 'GitHub-Repo für App-Updates', placeholder: 'gottschalkfelix4-source/hausgeist', help: 'Die Tablets zeigen einen Hinweis, sobald dort ein neueres Release liegt. Leer = kein Hinweis.' },
 };
 
@@ -715,6 +721,31 @@ function bindSettingsForm(root, s, { onSaved, saveBtn } = {}) {
   }
 }
 
+/** Aktivierungswort: Vorschläge zum Antippen und Vorschau, wie der Erkenner die Wörter zerlegt. */
+function bindWakePreview(root) {
+  const input = $('[data-key="wake_word"]', root);
+  const out = $('#wake-preview', root);
+  const chips = $('#wake-suggest', root);
+  let timer;
+  const refresh = async () => {
+    const r = await api('GET', `/api/wake/preview?word=${encodeURIComponent(input.value)}`).catch(() => null);
+    if (!r) return;
+    chips.innerHTML = r.suggestions.map((w) => `<button type="button" class="chip" data-word="${esc(w)}">+ ${esc(w.replace(/\s*\(.*\)/, ''))}</button>`).join('');
+    out.innerHTML = r.words.length
+      ? `Erkannt wird: ${r.words.map((w) => `<b>${esc(w.name)}</b> <code>${esc(w.tokens.join(' ').replaceAll('▁', '·'))}</code>`).join(', ')}`
+      : 'Kein Aktivierungswort: Die Tablets hören nicht mit, sprechen geht dann nur über das Mikrofon-Symbol.';
+  };
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(refresh, 250); });
+  chips.addEventListener('click', (e) => {
+    const word = e.target.closest('[data-word]')?.dataset.word;
+    if (!word) return;
+    const have = input.value.split(',').map((x) => x.trim()).filter(Boolean);
+    if (!have.some((x) => x.toLowerCase() === word.toLowerCase())) input.value = [...have, word].join(', ');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  refresh();
+}
+
 function fillVoices(root, voices) {
   const old = $('[data-key="elevenlabs_voice_id"]', root);
   if (!old || !voices.length) return;
@@ -790,6 +821,13 @@ async function settingsVoice() {
           </section>
         </div>
         <div class="stack">
+          <section class="glass card stack" style="gap:14px" id="wake"><h2>Aktivierungswort</h2>
+            <p class="muted small" style="margin:0">Die Tablets hören ständig auf dieses Wort, ganz ohne Internet. Erst danach wird aufgenommen und an den Server geschickt. Hören es mehrere, antwortet das Tablet, bei dem gerade jemand ist, sonst das, das dich am lautesten gehört hat.</p>
+            ${fields(['wake_word'], s)}
+            <div class="chips" id="wake-suggest"></div>
+            <p class="small muted" id="wake-preview" style="margin:0"></p>
+            ${fields(['wake_sensitivity'], s)}
+          </section>
           <section class="glass card stack" style="gap:14px"><h2>Zugangsschlüssel</h2>
             <p class="muted small" style="margin:0">Nur die Schlüssel der Anbieter, die du nutzt. Sie werden nie wieder angezeigt.</p>
             ${fields(['openai_api_key', 'xai_api_key', 'elevenlabs_api_key'], s)}
@@ -813,6 +851,7 @@ async function settingsVoice() {
     </section>`,
     bind(el) {
       bindSettingsForm($('#form', el), s, { onSaved: rerender });
+      bindWakePreview(el);
       $('#try', el).onsubmit = async (e) => {
         e.preventDefault();
         const btn = $('button', e.target);

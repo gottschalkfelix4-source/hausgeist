@@ -142,4 +142,19 @@ void main() {
     c.onAmbientLux(80);
     expect(c.brightness, b);
   });
+
+  test('Sprachassistent: wer ist da, wer steht direkt davor', () {
+    expect(c.recentlySeen || c.someoneNear, isFalse);
+    advance(const Duration(seconds: 5));
+    motionBurst(area: 0.05); // hinten im Raum
+    expect((c.recentlySeen, c.someoneNear), (true, false));
+    motionBurst(area: 0.5); // direkt vor dem Tablet
+    expect(c.someoneNear, isTrue);
+    advance(const Duration(seconds: 20));
+    expect((c.recentlySeen, c.someoneNear), (true, false));
+    advance(const Duration(seconds: 30));
+    expect(c.recentlySeen, isFalse);
+    c.onTouch();
+    expect((c.recentlySeen, c.someoneNear), (true, true));
+  });
 }

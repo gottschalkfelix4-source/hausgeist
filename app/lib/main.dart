@@ -9,6 +9,7 @@ import 'display/display_service.dart';
 import 'ui/home_screen.dart';
 import 'ui/setup_screen.dart';
 import 'ui/theme.dart';
+import 'voice/voice_orb.dart';
 import 'voice/voice_service.dart';
 
 Future<void> main() async {
@@ -53,8 +54,13 @@ class _WallAppState extends State<WallApp> {
       onDisplaySettings: _display.updateSettings,
     );
     _store = store;
-    _voice = VoiceService(store);
+    _voice = VoiceService(
+      store,
+      onActive: _display.wake,
+      presence: () => (seen: _display.ctrl.recentlySeen, near: _display.ctrl.someoneNear),
+    );
     store.start();
+    _voice!.start();
   }
 
   void _onDisplay() {
@@ -101,7 +107,8 @@ class _WallAppState extends State<WallApp> {
         colorSchemeSeed: Palette.acc,
         textTheme: ThemeData(brightness: Brightness.dark).textTheme.apply(bodyColor: palette.text, displayColor: palette.text),
       ),
-      // Über allem: Farbschema (Tag/Nacht) und der schwarze Vorhang, wenn das Display "aus" ist.
+      // Über allem: Farbschema (Tag/Nacht), der schwarze Vorhang, wenn das Display "aus" ist,
+      // und darüber die Sprach-Kugel, sobald jemand das Aktivierungswort sagt.
       builder: (context, child) => PaletteScope(
         palette: palette,
         child: Listener(
@@ -120,6 +127,7 @@ class _WallAppState extends State<WallApp> {
                 ),
               ),
             ),
+            if (_voice != null && !showSetup) Positioned.fill(child: VoiceOverlay(voice: _voice!)),
           ]),
         ),
       ),

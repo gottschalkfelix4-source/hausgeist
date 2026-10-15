@@ -34,6 +34,11 @@ android {
         versionName = flutter.versionName
     }
 
+    // Tablets sind ARM: x86-Bibliotheken (v. a. der Spracherkennung, ~30 MB) nicht einpacken.
+    packaging {
+        jniLibs { excludes += listOf("lib/x86/**", "lib/x86_64/**") }
+    }
+
     signingConfigs {
         if (releaseStoreFile != null) {
             create("release") {

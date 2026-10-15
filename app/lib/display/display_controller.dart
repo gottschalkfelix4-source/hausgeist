@@ -91,6 +91,7 @@ class DisplayController {
   late DateTime _lastPresence;
   late DateTime _stateSince;
   late DateTime _wokeAt;
+  DateTime? _lastNear, _lastSeen;
   bool _sensorPresent = false;
   final List<DateTime> _motionFrames = [];
 
@@ -125,9 +126,15 @@ class DisplayController {
   // ---------- Eingänge ----------
 
   void onTouch() {
-    _lastPresence = _clock();
+    _lastPresence = _lastNear = _lastSeen = _clock();
     _wake();
   }
+
+  /// Gerade jemand direkt vor dem Tablet (berührt oder große Bewegung im Kamerabild).
+  bool get someoneNear => _lastNear != null && _clock().difference(_lastNear!) < const Duration(seconds: 15);
+
+  /// Das Tablet selbst hat kürzlich jemanden bemerkt (Kamera oder Berührung, ohne Präsenzmelder).
+  bool get recentlySeen => _lastSeen != null && _clock().difference(_lastSeen!) < const Duration(seconds: 45);
 
   /// Ein Kamera-Frame hat sich deutlich vom vorherigen unterschieden.
   /// [area] = Anteil der geänderten Pixel (0..1). Wer direkt vor dem Tablet steht, füllt einen
@@ -141,6 +148,8 @@ class DisplayController {
       ..removeWhere((t) => now.difference(t) > settings.wakeWindow);
     if (_motionFrames.length < settings.motionFramesToWake) return;
     _lastPresence = now;
+    _lastSeen = now;
+    if (area >= settings.nearMotionArea) _lastNear = now;
     // Aus -> jede Bewegung weckt. Gedimmt/aktiv -> nur Annäherung macht (wieder) hell und
     // hält es hell, solange jemand davor steht. Kein Antippen nötig.
     if (_state == DisplayState.off || area >= settings.nearMotionArea) _wake();
