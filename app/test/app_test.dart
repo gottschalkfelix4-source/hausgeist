@@ -9,6 +9,7 @@ import 'package:hausgeist/core/home_store.dart';
 import 'package:hausgeist/display/motion_detector.dart';
 import 'package:hausgeist/ui/home_screen.dart';
 import 'package:hausgeist/ui/setup_screen.dart';
+import 'package:hausgeist/ui/sheets.dart';
 import 'package:hausgeist/voice/voice_service.dart';
 
 void main() {
@@ -96,6 +97,17 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('FAVORITEN'), findsOneWidget);
       expect(find.text('Weißtöne'), findsOneWidget);
+    });
+
+    testWidgets('Detail-Fenster ist auf dem Tablet groß und bedienbar', (t) async {
+      await pump(t);
+      await t.tap(find.text('Deckenlicht'));
+      await t.pumpAndSettle();
+      expect(t.getRect(find.byType(DeviceSheet)).width, greaterThan(1000)); // 780 × 1,33
+      final decke = store.devices.firstWhere((d) => d.id == 'light.decke');
+      await t.tap(find.text('Nachtlicht'));
+      await t.pump();
+      expect(decke.bri, 5);
     });
 
     testWidgets('über die Kachel wischen dimmt', (t) async {

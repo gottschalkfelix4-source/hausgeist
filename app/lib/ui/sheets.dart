@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../core/device.dart';
 import '../core/home_store.dart';
@@ -16,16 +17,74 @@ Future<void> openDeviceSheet(BuildContext context, HomeStore store, Device d) {
     barrierLabel: 'Schließen',
     barrierColor: const Color(0x4D000000),
     transitionDuration: const Duration(milliseconds: 220),
-    pageBuilder: (ctx, _, _) => BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-      child: Center(child: DeviceSheet(store: store, device: d)),
-    ),
+    pageBuilder: (ctx, _, _) {
+      // Auf großen Tablets alles vergrößern, damit es sich gut tippen lässt: Das Fenster wird für
+      // eine Fläche von etwa 800 × 560 gebaut und dann hochskaliert.
+      final mq = MediaQuery.of(ctx);
+      final zoom = math.min(mq.size.width / 800, mq.size.height / 560).clamp(1.0, 1.6);
+      return BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Center(
+          child: _Zoom(
+            scale: zoom,
+            child: MediaQuery(data: mq.copyWith(size: mq.size / zoom), child: DeviceSheet(store: store, device: d)),
+          ),
+        ),
+      );
+    },
     transitionBuilder: (ctx, a, _, child) => FadeTransition(
       opacity: a,
       child: ScaleTransition(
           scale: Tween(begin: .94, end: 1.0).animate(CurvedAnimation(parent: a, curve: Curves.easeOut)), child: child),
     ),
   );
+}
+
+/// Zeichnet [child] um [scale] vergrößert. Layout und Berührungen rechnen mit.
+class _Zoom extends SingleChildRenderObjectWidget {
+  const _Zoom({required this.scale, super.child});
+  final double scale;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderZoom(scale);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderZoom renderObject) => renderObject.scale = scale;
+}
+
+class _RenderZoom extends RenderProxyBox {
+  _RenderZoom(this._scale);
+  double _scale;
+
+  set scale(double v) {
+    if (v == _scale) return;
+    _scale = v;
+    markNeedsLayout();
+  }
+
+  Matrix4 get _matrix => Matrix4.diagonal3Values(_scale, _scale, 1);
+
+  @override
+  void performLayout() {
+    child!.layout(constraints / _scale, parentUsesSize: true);
+    size = constraints.constrain(child!.size * _scale);
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) =>
+      constraints.constrain(child!.getDryLayout(constraints / _scale) * _scale);
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (child != null) context.pushTransform(needsCompositing, offset, _matrix, super.paint);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) => result.addWithPaintTransform(
+      transform: _matrix, position: position, hitTest: (r, p) => child!.hitTest(r, position: p));
+
+  @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) => transform.multiply(_matrix);
 }
 
 class DeviceSheet extends StatelessWidget {
@@ -145,7 +204,7 @@ class _LightBody extends StatelessWidget {
           onSelect: (m) => store.setLightMode(d, m),
         ),
       if (colorMode)
-        Center(child: ColorWheel(hue: d.hue, sat: d.sat, onChanged: (h, s) => store.setColor(d, h, s)))
+        Center(child: ColorWheel(size: 190, hue: d.hue, sat: d.sat, onChanged: (h, s) => store.setColor(d, h, s)))
       else if (d.hasKelvin)
         KelvinBar(kelvin: d.kelvin, min: d.minKelvin, max: d.maxKelvin, onChanged: (k) => store.setKelvin(d, k)),
       if (swatches.isNotEmpty) ...[
