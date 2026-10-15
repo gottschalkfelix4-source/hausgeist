@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hausgeist Verwaltung</title>
+  <link rel="icon" href="favicon.png">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <!-- Anmeldung mit dem ADMIN_KEY aus der Server-Konfiguration -->
+  <main id="login" class="login" hidden>
+    <form class="glass card login-card" id="login-form">
+      <div class="brand"><img src="logo.svg" alt="" width="48" height="48"><span>Hausgeist</span></div>
+      <h1>Verwaltung</h1>
+      <p class="muted">Mit dem <code>ADMIN_KEY</code> aus der Server-Konfiguration anmelden.</p>
+      <label class="field">
+        <span>Admin-Key</span>
+        <input type="password" id="login-key" autocomplete="current-password" required>
+      </label>
+      <label class="check"><input type="checkbox" id="login-remember"> Auf diesem Gerät angemeldet bleiben</label>
+      <p class="error" id="login-error" hidden></p>
+      <button class="btn primary" type="submit">Anmelden</button>
+    </form>
+  </main>
+
+  <div id="app" class="shell" hidden>
+    <nav class="side glass" aria-label="Bereiche">
+      <div class="brand"><img src="logo.svg" alt="" width="32" height="32"><span>Hausgeist</span></div>
+      <a href="#/uebersicht" data-nav="uebersicht">Übersicht</a>
+      <a href="#/raeume" data-nav="raeume">Räume</a>
+      <a href="#/tablets" data-nav="tablets">Tablets</a>
+      <span class="grow"></span>
+      <a href="/docs" target="_blank" rel="noopener" class="small">API-Doku</a>
+      <button type="button" class="link small" id="logout">Abmelden</button>
+    </nav>
+    <main class="main" id="view" tabindex="-1"></main>
+  </div>
+
+  <dialog id="dialog" class="glass"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

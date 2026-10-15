@@ -5,6 +5,7 @@ Geräte (Zigbee, Hue, Klima, ...) -> Home Assistant (Unraid)
                                          |  REST + WebSocket
                                   Hausgeist-Server (FastAPI, Docker)
                                   - Räume, Tablets, Geräte-Zuordnung (SQLite)
+                                  - Web-Verwaltung (/admin), Kopplung per Code
                                   - Live-Updates raumgefiltert (/ws)
                                   - Sprachassistent: STT -> LLM (Tool-Calling) -> TTS
                                          |  HTTPS/WS im WLAN
@@ -13,10 +14,18 @@ Geräte (Zigbee, Hue, Klima, ...) -> Home Assistant (Unraid)
 
 ## Kernideen
 - **Home Assistant** liefert die Geräte-Integrationen, das Backend ist Raum-/Rechte-/Sprachschicht.
-- **Raum-Zuordnung**: Admin legt Räume an und weist Entities zu; jedes Tablet hat einen Token und
-  einen Raum. `/api/me`, `/ws` und `/api/entities/*/command` liefern/erlauben nur Geräte des Raums.
+- **Raum-Zuordnung**: Räume entstehen von Hand oder aus den Bereichen (Areas) von Home Assistant.
+  Jedes Tablet hat einen Token und einen Raum, mehrere Tablets pro Raum sind möglich.
+  `/api/me`, `/ws` und `/api/entities/*/command` liefern bzw. erlauben nur Geräte des Raums.
+- **Zustands-Cache**: Der Server hält eine WebSocket-Verbindung zu Home Assistant, abonniert
+  `state_changed` und führt alle Zustände im Speicher. `/api/me` und der Sprachassistent lesen aus
+  dem Cache, ohne REST-Aufruf. Bricht die Verbindung ab, wird alle 5 s neu verbunden, bis dahin gilt REST.
+- **Sofort übernehmen**: Ändert die Verwaltung Raum, Geräte oder Display-Einstellungen, schließt der
+  Server die betroffenen Tablet-WebSockets mit Code `4000`. Die App lädt dann sofort neu.
 - **Sprache**: Provider per `.env` wählbar. LLM: OpenAI oder xAI/Grok (gleiches Protokoll),
   TTS: ElevenLabs oder OpenAI, STT: OpenAI. Der Assistent darf nur Geräte des Tablet-Raums steuern.
+  Er bekommt deren Zustand samt Helligkeit, Temperaturen und Modi und merkt sich pro Tablet die
+  letzten 6 Nachrichten für 120 s (`pipeline.HISTORY_*`).
 - **Design (Apple Home)**: Kachel-Grid mit großen Rundungen, Frosted-Glass, aktive Kacheln hell/gelb,
   lange Druck = Detailansicht (Helligkeit-Slider, Thermostat-Ring), Raum-Titel oben, Sprach-Button.
 
@@ -75,16 +84,50 @@ Overlay. Echtes Abschalten würde die Kamera stoppen. Die Logik steckt in
   ein 32×24-Raster verkleinert und mit dem vorigen verglichen. Die Bilder bleiben im Speicher.
 - Ein Ticker ruft jede Sekunde `tick()` auf.
 
+## Kopplung und Sicherheit
+1. Die Verwaltung legt ein Tablet an (`POST /api/tablets`). Der Server erzeugt einen zufälligen Token
+   und einen 6-stelligen Kopplungscode, der 15 Minuten gilt.
+2. Die App schickt Server-Adresse und Code an `POST /api/pair` und bekommt den Token. Der Code ist
+   danach verbraucht. Pro IP sind 10 Fehlversuche in 5 Minuten erlaubt, danach kommt `429`.
+3. Ab dann schickt die App `Authorization: Bearer <token>`, auch beim WebSocket. `?token=` in der URL
+   geht nur noch für Apps der Version 0.1.x. Ein unbekannter Token wird mit Code `4401` abgewiesen.
+4. **Token erneuern** macht den alten Token sofort ungültig und erzeugt einen neuen Code.
+
+## Web-Verwaltung (`backend/app/admin/`)
+Reines HTML, CSS und JavaScript ohne Build-Schritt und ohne CDN. FastAPI liefert sie unter `/admin/`
+aus, `/` leitet dorthin weiter. Sie spricht mit der Admin-API und schickt den Admin-Key im Header
+`x-admin-key`. Gespeichert wird er in `sessionStorage`, bei „Angemeldet bleiben“ in `localStorage`.
+Routen: `#/uebersicht`, `#/raeume`, `#/raeume/<id>`, `#/tablets`, `#/tablets/<id>`.
+
+## App-Updates
+`GET /api/app/update` liefert das neueste GitHub-Release aus `UPDATE_REPO` (Version, APK-Link).
+Es wird 6 Stunden gecacht, nach einem Fehler 1 Stunde. Die App fragt höchstens alle 12 Stunden,
+vergleicht mit ihrer eigenen Version (`package_info_plus`) und zeigt bei Bedarf einen Hinweis. Der
+öffnet die APK im Browser (`url_launcher`). Weil alle Releases mit demselben Schlüssel signiert
+sind, installiert Android sie als Update.
+
+## Tests
+- `backend/tests/`: pytest mit einer Attrappe von Home Assistant. Getestet werden Admin-Schutz, Räume, Bereichs-Import,
+  Tablets, Kopplung (einmalig, Ablauf, Sperre), Raum-Grenzen bei Befehlen, WebSocket-Anmeldung und
+  -Neuladen, Werkzeug-Aufrufe des Sprachassistenten und sein Gedächtnis.
+- `app/test/`: Display-Logik, Gerätemodell, Oberfläche im Demo-Modus, Einrichtung, Versionsvergleich.
+- CI: `docker.yml` testet den Server vor dem Image-Bau. `app.yml` testet die App, baut die signierte
+  APK und hängt sie bei Tags `v*` ans Release.
+
 ## API (Kurzüberblick)
 | Endpoint | Auth | Zweck |
 |---|---|---|
-| `GET/POST/DELETE /api/rooms`, `PUT /api/rooms/{id}/entities` | Admin-Key | Räume + Geräte-Zuordnung |
+| `GET /api/status` | Admin-Key | Zustand von Server, HA, Providern, Tablets |
+| `GET/POST /api/rooms`, `PATCH/DELETE /api/rooms/{id}` | Admin-Key | Räume |
+| `PUT /api/rooms/{id}/entities`, `PUT /api/rooms/{id}/presence` | Admin-Key | Geräte, Präsenzmelder |
+| `GET /api/ha/areas`, `POST /api/rooms/import-areas` | Admin-Key | HA-Bereiche übernehmen |
 | `GET /api/entities` | Admin-Key | alle HA-Geräte |
-| `POST /api/tablets`, `PUT /api/tablets/{id}/room` | Admin-Key | Tablet registrieren/zuweisen |
-| `PUT /api/tablets/{id}/display`, `PUT /api/rooms/{id}/presence` | Admin-Key | Display-Verhalten, Präsenzmelder |
-| `GET /api/me` | Tablet-Token | Raum + Geräte des Tablets |
+| `GET/POST /api/tablets`, `PATCH/DELETE /api/tablets/{id}` | Admin-Key | Tablets |
+| `POST /api/tablets/{id}/pair`, `/token`; `PUT /api/tablets/{id}/display` | Admin-Key | Code, Token, Display |
+| `POST /api/pair` | Kopplungscode | Token abholen |
+| `GET /api/me`, `GET /api/app/update` | Tablet-Token | Raum + Geräte, App-Update |
 | `POST /api/entities/{id}/command` | Tablet-Token | Gerät steuern (nur eigener Raum) |
-| `WS /ws?token=` | Tablet-Token | Live-Zustände |
+| `WS /ws` (Header `Authorization`) | Tablet-Token | Live-Zustände, Aufwecken, Neuladen |
 | `POST /api/voice/text`, `/api/voice/audio` | Tablet-Token | Sprachassistent |
 
 ## Starten
@@ -109,15 +152,18 @@ flutter test                 # Display-Logik, Gerätemodell, Oberfläche
 flutter build apk --release  # -> build/app/outputs/flutter-apk/app-release.apk
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
-Beim ersten Start gibt man Server-URL und Tablet-Token ein oder startet die Demo. Die Einstellungen
+Beim ersten Start gibt man Server-URL und Kopplungscode ein (unter „Erweitert“ auch direkt den Token)
+oder startet die Demo. Die Einstellungen
 erreicht man später über langes Drücken auf die Uhr. Für den Kiosk-Betrieb wählt man unter
-Android „Zuhause“ als Standard-Startbildschirm.
+Android „Hausgeist“ als Standard-Startbildschirm.
 
 Hinweis Windows: `android/gradle.properties` setzt `kotlin.incremental=false`, weil Projekt (D:) und
 Pub-Cache (C:) auf verschiedenen Laufwerken liegen.
 
 ## Roadmap
 1. ✅ Backend-Grundgerüst
-2. ✅ Flutter-Tablet-App (Kachel-UI im Apple-Home-Stil, Setup-Screen für URL+Token, Kiosk-Modus, Display-Logik, Sprache)
-3. Admin-Weboberfläche (Räume/Tablets verwalten, HA-Areas importieren)
-4. Wake-Word & Streaming-Sprache (niedrige Latenz), Szenen/Automationen
+2. ✅ Flutter-Tablet-App (Kachel-UI im Apple-Home-Stil, Kiosk-Modus, Display-Logik, Sprache)
+3. ✅ Web-Verwaltung, HA-Bereiche importieren, Kopplung per Code
+4. ✅ Signierte Releases, Update-Hinweis, Tests in der CI
+5. Wake-Word und gestreamte Sprache mit niedriger Latenz. Das passiert größtenteils auf dem Tablet
+   und braucht Tests auf echter Hardware.

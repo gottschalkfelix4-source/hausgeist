@@ -9,9 +9,9 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/gottschalkfelix4-source/hausgeist/issues</Support>
   <Project>https://github.com/gottschalkfelix4-source/hausgeist</Project>
-  <Overview>Hausgeist macht Android-Tablets zu Wand-Bedienfeldern für Home Assistant. Jedes Tablet gehört zu einem Raum und zeigt nur dessen Geräte, im Stil von Apple Home. Dazu kommt ein Sprachassistent (OpenAI oder Grok, Sprachausgabe mit ElevenLabs oder OpenAI), der nur die Geräte des Raums steuert.[br][br]Dieser Container ist der Server: Er verbindet sich mit Home Assistant, verwaltet Räume und Tablets und leitet Sprachbefehle weiter. Die Tablet-App gibt es als APK auf GitHub.</Overview>
+  <Overview>Hausgeist macht Android-Tablets zu Wand-Bedienfeldern für Home Assistant. Jedes Tablet gehört zu einem Raum und zeigt nur dessen Geräte, im Stil von Apple Home. Dazu kommt ein Sprachassistent (OpenAI oder Grok, Sprachausgabe mit ElevenLabs oder OpenAI), der nur die Geräte des Raums steuert.[br][br]Dieser Container ist der Server: Er verbindet sich mit Home Assistant, verwaltet Räume und Tablets und leitet Sprachbefehle weiter. Räume und Tablets verwaltest du in der Weboberfläche unter /admin, Tablets koppelst du mit einem 6-stelligen Code. Die Tablet-App gibt es als APK auf GitHub.</Overview>
   <Category>HomeAutomation: Tools:</Category>
-  <WebUI>http://[IP]:[PORT:8080]/docs</WebUI>
+  <WebUI>http://[IP]:[PORT:8080]/admin/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/gottschalkfelix4-source/hausgeist/main/unraid/hausgeist.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/gottschalkfelix4-source/hausgeist/main/docs/assets/logo-256.png</Icon>
   <ExtraParams/>
@@ -21,11 +21,11 @@
   <DonateText/>
   <DonateLink/>
   <Requires>Home Assistant mit einem Long-Lived Access Token (HA: Profil &gt; Sicherheit).</Requires>
-  <Config Name="Port" Target="8080" Default="8080" Mode="tcp" Description="Port für Tablets und API. Die API-Dokumentation liegt unter /docs." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Port" Target="8080" Default="8080" Mode="tcp" Description="Port für Tablets, Verwaltung (/admin) und API (/docs)." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
   <Config Name="Daten" Target="/data" Default="/mnt/user/appdata/hausgeist" Mode="rw" Description="Datenbank mit Räumen, Tablets und Einstellungen." Type="Path" Display="advanced" Required="true" Mask="false">/mnt/user/appdata/hausgeist</Config>
   <Config Name="Home Assistant URL" Target="HA_URL" Default="http://homeassistant.local:8123" Mode="" Description="Adresse deiner Home-Assistant-Instanz, z. B. http://192.168.1.10:8123" Type="Variable" Display="always" Required="true" Mask="false">http://homeassistant.local:8123</Config>
   <Config Name="Home Assistant Token" Target="HA_TOKEN" Default="" Mode="" Description="Long-Lived Access Token aus Home Assistant (Profil &gt; Sicherheit &gt; Langlebige Zugriffstoken)." Type="Variable" Display="always" Required="true" Mask="true"/>
-  <Config Name="Admin-Key" Target="ADMIN_KEY" Default="" Mode="" Description="Selbst gewähltes Passwort für die Verwaltung (Räume, Tablets). Solange es leer oder change-me ist, sind die Admin-Funktionen gesperrt." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Admin-Key" Target="ADMIN_KEY" Default="" Mode="" Description="Selbst gewähltes Passwort für die Verwaltung unter /admin. Solange es leer oder change-me ist, sind die Admin-Funktionen gesperrt." Type="Variable" Display="always" Required="true" Mask="true"/>
   <Config Name="OpenAI API-Key" Target="OPENAI_API_KEY" Default="" Mode="" Description="Für Spracherkennung (immer), Sprachmodell (wenn LLM = openai) und Sprachausgabe (wenn TTS = openai)." Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="Sprachmodell (LLM)" Target="LLM_PROVIDER" Default="openai|xai" Mode="" Description="openai = ChatGPT-Modelle, xai = Grok." Type="Variable" Display="always" Required="true" Mask="false">openai</Config>
   <Config Name="Sprachausgabe (TTS)" Target="TTS_PROVIDER" Default="elevenlabs|openai" Mode="" Description="Welche Stimme antwortet." Type="Variable" Display="always" Required="true" Mask="false">elevenlabs</Config>
@@ -35,5 +35,7 @@
   <Config Name="Spracherkennung (STT)" Target="STT_PROVIDER" Default="openai" Mode="" Description="Derzeit nur openai." Type="Variable" Display="advanced" Required="false" Mask="false">openai</Config>
   <Config Name="OpenAI Modell" Target="OPENAI_LLM_MODEL" Default="gpt-4o-mini" Mode="" Description="Modell, wenn LLM = openai." Type="Variable" Display="advanced" Required="false" Mask="false">gpt-4o-mini</Config>
   <Config Name="Grok Modell" Target="XAI_LLM_MODEL" Default="grok-3-mini" Mode="" Description="Modell, wenn LLM = xai." Type="Variable" Display="advanced" Required="false" Mask="false">grok-3-mini</Config>
+  <Config Name="Update-Quelle" Target="UPDATE_REPO" Default="gottschalkfelix4-source/hausgeist" Mode="" Description="GitHub-Repo, dessen neuestes Release die Tablets als Update anbieten. Leer = kein Update-Hinweis." Type="Variable" Display="advanced" Required="false" Mask="false">gottschalkfelix4-source/hausgeist</Config>
+  <Config Name="Vertrauenswürdige Proxys" Target="FORWARDED_ALLOW_IPS" Default="127.0.0.1" Mode="" Description="Nur hinter einem Reverse Proxy (HTTPS): IP des Proxys, damit Hausgeist die echte Client-IP sieht." Type="Variable" Display="advanced" Required="false" Mask="false">127.0.0.1</Config>
   <Config Name="Zeitzone" Target="TZ" Default="Europe/Berlin" Mode="" Description="Zeitzone für Logs." Type="Variable" Display="advanced" Required="false" Mask="false">Europe/Berlin</Config>
 </Container>

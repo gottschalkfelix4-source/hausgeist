@@ -11,6 +11,7 @@ PRESENT_STATES = {"on", "home", "detected"}
 
 @dataclass
 class Client:
+    tablet_id: str
     room_id: str | None
     wake_mode: str  # camera | sensor | both
 
@@ -19,9 +20,22 @@ class Hub:
     def __init__(self) -> None:
         self.clients: dict[WebSocket, Client] = {}
 
-    async def add(self, ws: WebSocket, room_id: str | None, wake_mode: str) -> None:
+    async def add(self, ws: WebSocket, tablet_id: str, room_id: str | None, wake_mode: str) -> None:
         await ws.accept()
-        self.clients[ws] = Client(room_id, wake_mode)
+        self.clients[ws] = Client(tablet_id, room_id, wake_mode)
+
+    def online(self) -> set[str]:
+        return {c.tablet_id for c in self.clients.values()}
+
+    async def reload(self, tablet_id: str | None = None, room_id: str | None = None) -> None:
+        """Einstellungen geaendert: betroffene Tablets neu verbinden lassen, damit sie neu laden."""
+        for ws, c in list(self.clients.items()):
+            if c.tablet_id == tablet_id or (room_id and c.room_id == room_id):
+                self.remove(ws)
+                try:
+                    await ws.close(code=4000)
+                except Exception:  # noqa: BLE001
+                    pass
 
     def remove(self, ws: WebSocket) -> None:
         self.clients.pop(ws, None)

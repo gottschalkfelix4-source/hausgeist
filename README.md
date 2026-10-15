@@ -26,9 +26,12 @@ Das Display bleibt immer bereit. Es wird hell, sobald jemand davor steht, und du
   - [1. Server auf Unraid](#1-server-auf-unraid)
   - [2. Räume und Tablets anlegen](#2-räume-und-tablets-anlegen)
   - [3. Tablet einrichten](#3-tablet-einrichten)
+  - [Updates](#updates)
+- [Web-Verwaltung](#web-verwaltung)
 - [Display-Verhalten](#display-verhalten)
 - [Sprachassistent](#sprachassistent)
 - [Konfiguration](#konfiguration)
+- [Zugriff von außen / HTTPS](#zugriff-von-außen--https)
 - [API](#api)
 - [Entwicklung](#entwicklung)
 - [Datenschutz](#datenschutz)
@@ -38,14 +41,17 @@ Das Display bleibt immer bereit. Es wird hell, sobald jemand davor steht, und du
 
 | | |
 |---|---|
-| 🏠 **Ein Tablet, ein Raum** | Jedes Tablet bekommt einen Token und einen Raum. Es sieht und steuert nur die Geräte dieses Raums. |
+| 🏠 **Ein Tablet, ein Raum** | Jedes Tablet gehört zu einem Raum. Es sieht und steuert nur die Geräte dieses Raums. Mehrere Tablets pro Raum sind kein Problem. |
+| 🖥️ **Web-Verwaltung** | Räume, Geräte, Präsenzmelder, Tablets und Display-Verhalten im Browser einstellen. Räume lassen sich mit einem Klick aus den Home-Assistant-Bereichen übernehmen. |
+| 🔢 **Koppeln per Code** | Tablet anlegen, 6-stelligen Code in der App eintippen, fertig. Kein Token abtippen. |
 | 💡 **Licht** | Ein/aus, Helligkeit per Wischen über die Kachel, Farbrad, Weißtöne in Kelvin, Favoriten. |
 | ❄️ **Klima** | Drehregler für die Zieltemperatur, Modi (Kühlen, Heizen, Automatik, Entfeuchten, Lüften), Lüfterstufe, Lamellen, Eco. |
 | 🪟 **Rollos, Musik, Szenen, Schlösser** | Position, Lautstärke und Titel, Szenen per Tipp, Türschloss. |
-| 🗣️ **Sprachassistent** | Mikro halten und sprechen oder antippen und schreiben. Spracherkennung mit OpenAI, Sprachmodell OpenAI oder Grok (xAI), Antwortstimme mit ElevenLabs oder OpenAI. |
+| 🗣️ **Sprachassistent** | Mikro halten und sprechen oder antippen und schreiben. Spracherkennung mit OpenAI, Sprachmodell OpenAI oder Grok (xAI), Antwortstimme mit ElevenLabs oder OpenAI. Er merkt sich die letzten Sätze, „und jetzt etwas dunkler“ funktioniert also. |
 | 👋 **Wird hell bei Annäherung** | Die Frontkamera erkennt, wenn jemand vor das Tablet tritt. Antippen ist nicht nötig. Wer hinten im Raum vorbeigeht, weckt es nicht. |
 | 🌙 **Blendet nicht** | Die Helligkeit folgt dem Raumlicht. Nachts gibt es eine Obergrenze und ein dunkles Design. |
 | 🔁 **Live** | Änderungen aus Home Assistant erscheinen sofort, nach einem Verbindungsabbruch verbindet sich die App selbst neu. |
+| ⬆️ **Update-Hinweis** | Gibt es ein neues Release, zeigt das Tablet einen Hinweis und lädt die neue APK auf Fingertipp. |
 | 🧪 **Demo-Modus** | Die App lässt sich ohne Server mit Beispielgeräten ausprobieren. |
 
 ## Screenshots
@@ -55,8 +61,10 @@ Das Display bleibt immer bereit. Es wird hell, sobald jemand davor steht, und du
 | ![Licht](docs/screenshots/03-licht.png) | ![Farblicht](docs/screenshots/05-farblicht.png) |
 | **Klimaanlage** | **Sprachassistent** |
 | ![Klima](docs/screenshots/04-klima.png) | ![Sprache](docs/screenshots/06-sprache.png) |
-| **Einrichtung** | **Hochformat** |
-| ![Einrichtung](docs/screenshots/01-einrichtung.png) | <img src="docs/screenshots/07-hochformat.png" alt="Hochformat" width="60%"> |
+| **Einrichtung mit Kopplungscode** | **Nachts** |
+| ![Einrichtung](docs/screenshots/01-einrichtung.png) | ![Nacht](docs/screenshots/11-nacht.png) |
+| **Hochformat** | |
+| <img src="docs/screenshots/07-hochformat.png" alt="Hochformat" width="60%"> | |
 
 ## So funktioniert es
 
@@ -65,7 +73,7 @@ Geräte (Zigbee, Hue, Klima, …) ──► Home Assistant
                                        │  REST + WebSocket
                                        ▼
                               Hausgeist-Server (Docker, z. B. Unraid)
-                              • Räume, Tablets, Zuordnung (SQLite)
+                              • Räume, Tablets, Zuordnung (SQLite), Web-Verwaltung
                               • Live-Zustände, nach Raum gefiltert
                               • Sprache: STT ─► LLM mit Tool-Calling ─► TTS
                                        │  WLAN, Token pro Tablet
@@ -99,7 +107,7 @@ Du brauchst:
    - **Home Assistant Token**
    - **Admin-Key**: ein selbst gewähltes, langes Passwort
    - **OpenAI API-Key** und die Sprach-Provider (optional)
-4. **Apply**. Unter `http://<unraid-ip>:8080/docs` siehst du die API, unter `/health` den Status.
+4. **Apply**. Die Verwaltung öffnest du über das Container-Icon → **WebUI** oder unter `http://<unraid-ip>:8080/admin/`.
 
 **Mit Docker Compose (jeder Docker-Host):**
 
@@ -114,37 +122,25 @@ Das Image `ghcr.io/gottschalkfelix4-source/hausgeist` gibt es für `amd64` und `
 
 ### 2. Räume und Tablets anlegen
 
-> Eine Web-Oberfläche zur Verwaltung ist in Arbeit. Bis dahin geht das über die API, entweder mit
-> `curl` oder bequem im Browser unter `http://<server>:8080/docs` („Try it out“, Admin-Key ins Feld `x-admin-key`).
+Öffne `http://<server>:8080/admin/` und melde dich mit dem **Admin-Key** an.
 
-```bash
-S=http://192.168.1.10:8080
-K="dein-admin-key"
+1. **Räume → Aus Home Assistant übernehmen.** Hausgeist legt für jeden Bereich (Area) aus Home Assistant
+   einen Raum an und ordnet die Geräte zu. Gibt es im Bereich genau einen Präsenzmelder, wird er
+   automatisch eingetragen. Du kannst auch einzelne Bereiche wählen oder Räume von Hand anlegen.
+2. **Raum öffnen**, um Geräte an- oder abzuwählen, ihn umzubenennen oder den Präsenzmelder zu ändern.
+3. **Tablets → Tablet hinzufügen**: Name und Raum wählen. Es erscheint ein **Kopplungscode**, der 15 Minuten gilt.
 
-# Raum anlegen -> liefert die Raum-ID
-curl -X POST $S/api/rooms -H "x-admin-key: $K" -H "Content-Type: application/json" -d '{"name":"Wohnzimmer"}'
-
-# Alle Geräte aus Home Assistant ansehen
-curl $S/api/entities -H "x-admin-key: $K"
-
-# Geräte dem Raum zuordnen
-curl -X PUT $S/api/rooms/<RAUM_ID>/entities -H "x-admin-key: $K" -H "Content-Type: application/json" \
-  -d '{"entity_ids":["light.decke","climate.klima","cover.rollo"]}'
-
-# Optional: Präsenzmelder des Raums (weckt alle Tablets im Raum)
-curl -X PUT $S/api/rooms/<RAUM_ID>/presence -H "x-admin-key: $K" -H "Content-Type: application/json" \
-  -d '{"entity_id":"binary_sensor.wohnzimmer_praesenz"}'
-
-# Tablet registrieren -> liefert den Token für die App (nur einmal sichtbar!)
-curl -X POST $S/api/tablets -H "x-admin-key: $K" -H "Content-Type: application/json" \
-  -d '{"name":"Wohnzimmer-Tablet","room_id":"<RAUM_ID>"}'
-```
+<p align="center">
+  <img src="docs/screenshots/09-raum-geraete.png" alt="Geräte eines Raums in der Verwaltung" width="49%">
+  <img src="docs/screenshots/10-kopplung.png" alt="Kopplungscode" width="49%">
+</p>
 
 ### 3. Tablet einrichten
 
 1. Die APK aus den [Releases](https://github.com/gottschalkfelix4-source/hausgeist/releases/latest) aufs Tablet laden und installieren (Installation aus unbekannten Quellen erlauben).
    Per USB geht es auch mit `adb install -r hausgeist.apk`.
-2. App öffnen, **Server-Adresse** (`http://<server>:8080`) und **Tablet-Token** eintragen und auf **Verbinden** tippen.
+2. App öffnen, **Server-Adresse** (`http://<server>:8080`) und den **Kopplungscode** eintragen und auf **Verbinden** tippen.
+   Der Code gilt nur einmal. Abgelaufen? In der Verwaltung beim Tablet auf **Neuer Kopplungscode** klicken.
    Ohne Server kannst du auf **Ohne Server ausprobieren (Demo)** tippen.
 3. Kamera und Mikrofon erlauben.
 4. **Kiosk-Modus:** Einmal die Home-Taste drücken und *Hausgeist* als Startbildschirm mit **Immer** wählen.
@@ -161,6 +157,34 @@ curl -X POST $S/api/tablets -H "x-admin-key: $K" -H "Content-Type: application/j
 | Mikro gedrückt halten | Sprechen |
 | Mikro kurz antippen | Befehl eintippen |
 | Lange auf die Uhr drücken | Einrichtung |
+
+Raum, Geräte und Display-Einstellungen änderst du in der Verwaltung. Die Tablets übernehmen das sofort, ohne Neustart.
+
+### Updates
+
+**Server:** Unraid zeigt neue Images unter *Docker → Check for Updates*. Mit Compose: `docker compose pull && docker compose up -d`.
+
+**App:** Gibt es auf GitHub ein neueres Release, zeigt das Tablet unten links **Update … verfügbar**. Antippen lädt
+die APK im Browser, danach die Datei öffnen und installieren. Kopplung und Einstellungen bleiben erhalten.
+
+> **Von 0.1.x auf 0.2.0:** Die App hat eine neue Paket-ID (`de.hausgeist.wall`) und ist jetzt mit einem
+> festen Release-Schlüssel signiert. Sie wird deshalb **neben** der alten App installiert. Alte App
+> deinstallieren, neue installieren und einmal koppeln. Ab 0.2.0 funktionieren Updates ganz normal.
+
+## Web-Verwaltung
+
+<p align="center">
+  <img src="docs/screenshots/08-verwaltung.png" alt="Räume in der Verwaltung" width="100%">
+</p>
+
+| Bereich | Was du dort machst |
+|---|---|
+| **Übersicht** | Verbindung zu Home Assistant, Status der Sprach-Provider, welche Tablets online sind. Eine Checkliste führt durch die Ersteinrichtung. |
+| **Räume** | Bereiche aus Home Assistant übernehmen, Räume anlegen, umbenennen, löschen. Geräte per Suche und Häkchen zuordnen. Präsenzmelder wählen. |
+| **Tablets** | Tablets anlegen und einem Raum zuweisen, auch mehrere pro Raum. Kopplungscode erzeugen, Token erneuern, Tablet entfernen. Display-Verhalten pro Tablet einstellen. |
+
+Die Verwaltung funktioniert auch auf dem Handy. Der Admin-Key bleibt nur in diesem Browser-Tab gespeichert,
+außer du setzt das Häkchen bei **Angemeldet bleiben**.
 
 ## Display-Verhalten
 
@@ -183,7 +207,7 @@ Damit es nicht flackert:
 - Die Helligkeit folgt dem Lichtsensor gemittelt und mit Hysterese, damit sie nicht pumpt.
 
 Nachts (standardmäßig 22–6 Uhr) oder in sehr dunklen Räumen gilt eine Obergrenze von 15 % und das Design
-wird dunkel. Alle Werte lassen sich pro Tablet über `PUT /api/tablets/{id}/display` ändern, siehe
+wird dunkel. Alle Werte lassen sich pro Tablet in der Verwaltung unter **Tablets** ändern, siehe
 [ARCHITECTURE.md](docs/ARCHITECTURE.md#display-verhalten-dauer-wach-dimmen-nacht).
 
 ## Sprachassistent
@@ -194,8 +218,11 @@ Tablet ── Audio (m4a) ──► Server ── STT (OpenAI) ──► LLM (Op
 Tablet ◄── Antwort + Audio ◄── TTS (ElevenLabs | OpenAI) ◄───────────┘
 ```
 
-Das Sprachmodell bekommt nur die Geräte des Tablet-Raums und kann nur diese steuern.
-Beispiele: *„Mach das Licht gemütlich“*, *„Stell die Klima auf 21 Grad“*, *„Rollo halb runter“*.
+Das Sprachmodell bekommt nur die Geräte des Tablet-Raums mit ihrem aktuellen Zustand und kann nur diese steuern.
+Es kann auch Farben und Weißtöne setzen. Pro Tablet merkt es sich die letzten Sätze für zwei Minuten.
+Beispiele: *„Mach das Licht gemütlich“*, *„Stell die Klima auf 21 Grad“*, *„Rollo halb runter“*, danach *„noch ein bisschen weiter“*.
+
+Ob die Schlüssel der Provider gesetzt sind, zeigt die Übersicht in der Verwaltung.
 
 ## Konfiguration
 
@@ -215,20 +242,46 @@ Alle Einstellungen des Servers sind Umgebungsvariablen (Unraid-Template oder `ba
 | `OPENAI_LLM_MODEL` | `gpt-4o-mini` | Modell für `openai` |
 | `XAI_LLM_MODEL` | `grok-3-mini` | Modell für `xai` |
 | `DB_PATH` | `/data/hausgeist.db` | SQLite-Datenbank |
+| `UPDATE_REPO` | `gottschalkfelix4-source/hausgeist` | GitHub-Repo für den Update-Hinweis der App. Leer schaltet ihn ab. |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | IP des Reverse Proxys, dem Hausgeist `X-Forwarded-For` glaubt |
+
+## Zugriff von außen / HTTPS
+
+Im Heimnetz reicht `http://`. Wer Hausgeist über das Internet erreichbar machen will, sollte einen
+Reverse Proxy mit HTTPS davorsetzen, zum Beispiel **Nginx Proxy Manager** (gibt es als Unraid-App):
+
+1. Neuer *Proxy Host*: Domain eintragen, *Forward* auf `http://<unraid-ip>:8080`.
+2. **Websockets Support** einschalten. Ohne ihn kommen keine Live-Updates an.
+3. Unter *SSL* ein Let's-Encrypt-Zertifikat anfordern und *Force SSL* aktivieren.
+4. Im Container `FORWARDED_ALLOW_IPS` auf die IP des Proxys setzen. So zählt die Sperre gegen das
+   Durchprobieren von Kopplungscodes (10 Fehlversuche in 5 Minuten) pro echtem Gerät.
+5. In der App als Server `https://deine-domain` eintragen.
+
+Sicherheit im Überblick:
+- Tablets melden sich mit einem eigenen Token an. Er geht im `Authorization`-Header mit, auch beim
+  WebSocket, und landet so nicht in Proxy-Logs.
+- Kopplungscodes gelten 15 Minuten und nur einmal.
+- Die Verwaltung ist mit dem Admin-Key geschützt. Solange er leer oder `change-me` ist, ist sie gesperrt.
+- Ein verlorenes Tablet entfernst du in der Verwaltung oder klickst dort **Token erneuern**.
 
 ## API
 
 | Endpoint | Auth | Zweck |
 |---|---|---|
-| `GET/POST/DELETE /api/rooms`, `PUT /api/rooms/{id}/entities` | `x-admin-key` | Räume und Geräte-Zuordnung |
-| `PUT /api/rooms/{id}/presence` | `x-admin-key` | Präsenzmelder des Raums |
+| `GET /api/status` | `x-admin-key` | Version, Home Assistant, Sprach-Provider, Tablets online |
+| `GET/POST /api/rooms`, `PATCH/DELETE /api/rooms/{id}` | `x-admin-key` | Räume |
+| `PUT /api/rooms/{id}/entities`, `PUT /api/rooms/{id}/presence` | `x-admin-key` | Geräte und Präsenzmelder eines Raums |
+| `GET /api/ha/areas`, `POST /api/rooms/import-areas` | `x-admin-key` | Bereiche aus Home Assistant übernehmen |
 | `GET /api/entities` | `x-admin-key` | Alle Geräte aus Home Assistant |
-| `GET/POST /api/tablets`, `PUT /api/tablets/{id}/room` | `x-admin-key` | Tablets registrieren und zuweisen |
+| `GET/POST /api/tablets`, `PATCH/DELETE /api/tablets/{id}` | `x-admin-key` | Tablets anlegen, Raum zuweisen, entfernen |
+| `POST /api/tablets/{id}/pair`, `POST /api/tablets/{id}/token` | `x-admin-key` | Neuer Kopplungscode, Token erneuern |
 | `PUT /api/tablets/{id}/display` | `x-admin-key` | Display-Verhalten pro Tablet |
+| `POST /api/pair` | Kopplungscode | Liefert den Token für die App |
 | `GET /api/me` | Tablet-Token | Raum, Geräte und Display-Einstellungen |
 | `POST /api/entities/{id}/command` | Tablet-Token | Gerät steuern (nur im eigenen Raum) |
-| `WS /ws?token=` | Tablet-Token | Live-Zustände und Aufwecken |
+| `WS /ws` | Tablet-Token im Header | Live-Zustände und Aufwecken |
 | `POST /api/voice/text`, `/api/voice/audio` | Tablet-Token | Sprachassistent |
+| `GET /api/app/update` | Tablet-Token | Neueste App-Version |
 | `GET /health` | – | Status |
 
 Die vollständige, interaktive Doku liegt auf jedem Server unter `/docs`.
@@ -246,10 +299,13 @@ docs/      Architektur, Logo, Screenshots
 ```bash
 cd backend
 python -m venv .venv && .venv/Scripts/activate   # Linux/macOS: source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env
 DB_PATH=./hausgeist.db uvicorn app.main:app --reload --port 8080
+python -m pytest                     # API, Kopplung, Raum-Grenzen, Sprach-Werkzeuge, HA-Bereiche
 ```
+
+Die Verwaltung (`backend/app/admin/`) ist reines HTML, CSS und JavaScript ohne Build-Schritt.
 
 **App:**
 ```bash
@@ -259,6 +315,15 @@ flutter build apk --release   # build/app/outputs/flutter-apk/app-release.apk
 ```
 
 Die Display-Logik (`app/lib/display/display_controller.dart`) ist reines Dart und vollständig getestet.
+
+**Signieren:** Ohne Schlüssel signiert Gradle mit dem Debug-Schlüssel, das reicht zum Ausprobieren.
+Für Releases liest `app/android/app/build.gradle.kts` entweder `app/android/key.properties`
+(`storeFile`, `storePassword`, `keyAlias`, `keyPassword`, nicht im Repo) oder die Umgebungsvariablen
+`HAUSGEIST_KEYSTORE`, `HAUSGEIST_KEYSTORE_PASSWORD`, `HAUSGEIST_KEY_ALIAS` und `HAUSGEIST_KEY_PASSWORD`.
+
+**Release:** Version in `app/pubspec.yaml` und `backend/app/__init__.py` erhöhen, dann einen Tag `vX.Y.Z` pushen.
+Die CI testet Server und App, baut das Docker-Image und hängt die signierte `hausgeist-X.Y.Z.apk` ans Release.
+Den Schlüssel bekommt sie aus den Secrets `HAUSGEIST_KEYSTORE_BASE64` und `HAUSGEIST_KEYSTORE_PASSWORD`.
 
 ## Datenschutz
 
@@ -273,8 +338,10 @@ Die Display-Logik (`app/lib/display/display_controller.dart`) ist reines Dart un
 - [x] Server mit Räumen, Tablets, Live-Updates und Sprachassistent
 - [x] Tablet-App mit Apple-Home-Design, Detailfenstern und Display-Logik
 - [x] Unraid-Template und Docker-Image
-- [ ] Web-Oberfläche zur Verwaltung (Räume, Tablets, Präsenzmelder, Display-Einstellungen)
-- [ ] Areas aus Home Assistant automatisch als Räume übernehmen
+- [x] Web-Oberfläche zur Verwaltung (Räume, Tablets, Präsenzmelder, Display-Einstellungen)
+- [x] Bereiche aus Home Assistant automatisch als Räume übernehmen
+- [x] Koppeln per Code, signierte Releases, Update-Hinweis in der App
+- [x] Gesprächsgedächtnis für den Sprachassistenten
 - [ ] Wake-Word („Hey Hausgeist“) und gestreamte Sprache
 
 ## Lizenz

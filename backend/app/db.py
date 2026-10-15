@@ -35,8 +35,9 @@ def conn() -> sqlite3.Connection:
 def _migrate(c: sqlite3.Connection) -> None:
     """Spalten nachruesten, die nach dem ersten Release dazugekommen sind."""
     added = {
-        "rooms": [("presence_entity", "TEXT")],
-        "tablets": [("display", "TEXT NOT NULL DEFAULT '{}'")],  # JSON, siehe main.Display
+        "rooms": [("presence_entity", "TEXT"), ("ha_area_id", "TEXT")],
+        "tablets": [("display", "TEXT NOT NULL DEFAULT '{}'"),  # JSON, siehe main.Display
+                    ("pair_code", "TEXT"), ("pair_expires", "REAL")],
     }
     for table, cols in added.items():
         have = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
@@ -52,6 +53,17 @@ def new_id() -> str:
 
 def new_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def new_pair_code() -> str:
+    """Sechsstelliger Kopplungscode, den man am Tablet statt des langen Tokens eintippt."""
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def tablet_by_token(token: str):
+    if not token:
+        return None
+    return conn().execute("SELECT * FROM tablets WHERE token=?", (token,)).fetchone()
 
 
 def room_entity_ids(room_id: str) -> list[str]:

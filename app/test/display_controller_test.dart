@@ -1,4 +1,4 @@
-import 'package:smarthome_wall/display/display_controller.dart';
+import 'package:hausgeist/display/display_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -21,5 +21,8 @@ class Settings(BaseSettings):
 
     db_path: str = "/data/hausgeist.db"
 
+    # Update-Hinweis fuer die Tablet-App: neuestes Release aus diesem GitHub-Repo ("" = aus)
+    update_repo: str = "gottschalkfelix4-source/hausgeist"
+
 
 settings = Settings()

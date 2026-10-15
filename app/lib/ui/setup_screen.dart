@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/api.dart';
 import '../core/config.dart';
 import 'theme.dart';
 
-/// Ersteinrichtung: Server-Adresse und Tablet-Token (aus der Web-Admin-Oberfläche) eintragen.
+/// Ersteinrichtung: Server-Adresse und Kopplungscode aus der Verwaltung eintragen
+/// (oder unter "Erweitert" direkt den Tablet-Token).
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key, required this.initial, required this.onDone});
   final AppConfig initial;
@@ -18,23 +20,46 @@ class _SetupScreenState extends State<SetupScreen> {
   late final _server = TextEditingController(
       text: widget.initial.server);
   late final _token = TextEditingController(text: widget.initial.token);
+  final _code = TextEditingController();
+  late bool _advanced = widget.initial.token.isNotEmpty;
   bool _busy = false;
   String? _msg;
 
+  @override
+  void dispose() {
+    _server.dispose();
+    _token.dispose();
+    _code.dispose();
+    super.dispose();
+  }
+
   Future<void> _connect() async {
+    final server = _server.text.trim();
+    final code = _code.text.replaceAll(RegExp(r'\D'), '');
+    if (server.isEmpty) return setState(() => _msg = 'Bitte die Server-Adresse eintragen.');
+    if (!_advanced && code.length != 6) return setState(() => _msg = 'Der Kopplungscode hat 6 Ziffern.');
     setState(() {
       _busy = true;
       _msg = null;
     });
+    String? token;
     try {
-      final me = await Api(_server.text, _token.text.trim()).me();
-      final cfg = AppConfig(server: _server.text.trim(), token: _token.text.trim());
+      token = _advanced ? _token.text.trim() : await Api.pair(server, code);
+      final me = await Api(server, token).me();
+      final cfg = AppConfig(server: server, token: token);
       await cfg.save();
       if (!mounted) return;
       _msg = 'Verbunden: ${me['tablet']}';
       widget.onDone(cfg);
     } catch (e) {
-      setState(() => _msg = 'Verbindung fehlgeschlagen: $e');
+      setState(() {
+        _msg = 'Verbindung fehlgeschlagen: $e';
+        // Code ist schon eingelöst: Token behalten, damit ein neuer Versuch ohne neuen Code geht.
+        if (token != null && !_advanced) {
+          _token.text = token;
+          _advanced = true;
+        }
+      });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -80,7 +105,9 @@ class _SetupScreenState extends State<SetupScreen> {
                     const SizedBox(height: 20),
                     const Text('Wandtablet einrichten', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
-                    Text('Adresse des Hausgeist-Servers und den Tablet-Token eintragen.',
+                    Text(
+                        'In der Hausgeist-Verwaltung unter „Tablets“ ein Tablet anlegen. '
+                        'Dann hier die Server-Adresse und den angezeigten Code eintragen.',
                         style: TextStyle(color: p.textMuted, height: 1.4)),
                     const SizedBox(height: 20),
                     TextField(
@@ -90,16 +117,37 @@ class _SetupScreenState extends State<SetupScreen> {
                       decoration: deco('Server', 'http://192.168.1.10:8080'),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: _token,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: deco('Tablet-Token', 'vom Hausgeist-Server'),
+                    if (_advanced)
+                      TextField(
+                        controller: _token,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: deco('Tablet-Token', 'aus der Verwaltung'),
+                      )
+                    else
+                      TextField(
+                        controller: _code,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+                        onSubmitted: (_) => _busy ? null : _connect(),
+                        style: const TextStyle(color: Colors.white, fontSize: 22, letterSpacing: 6),
+                        decoration: deco('Kopplungscode', '123456'),
+                      ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => setState(() {
+                          _advanced = !_advanced;
+                          _msg = null;
+                        }),
+                        style: TextButton.styleFrom(foregroundColor: p.textMuted),
+                        child: Text(_advanced ? 'Mit Kopplungscode verbinden' : 'Erweitert: Token eingeben'),
+                      ),
                     ),
                     if (_msg != null) ...[
                       const SizedBox(height: 12),
                       Text(_msg!, style: TextStyle(color: p.textMuted)),
                     ],
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
                     FilledButton(
                       onPressed: _busy ? null : _connect,
                       style: FilledButton.styleFrom(

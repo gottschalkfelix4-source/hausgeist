@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/device.dart';
 import '../core/home_store.dart';
@@ -32,7 +33,11 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   Expanded(child: SingleChildScrollView(child: _Grid(store: store))),
                   const SizedBox(height: 12),
-                  Align(alignment: Alignment.centerRight, child: _MicButton(voice: voice)),
+                  Row(children: [
+                    if (store.update != null) _UpdateChip(update: store.update!),
+                    const Spacer(),
+                    _MicButton(voice: voice),
+                  ]),
                 ]),
               ),
               if (voice.bubble != null)
@@ -229,6 +234,52 @@ class _Grid extends StatelessWidget {
         ],
       );
     });
+  }
+}
+
+// ---------- Update-Hinweis ----------
+
+class _UpdateChip extends StatelessWidget {
+  const _UpdateChip({required this.update});
+  final Map<String, dynamic> update;
+
+  Future<void> _open(BuildContext context) async {
+    final version = update['version'];
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF26262E),
+        title: Text('Hausgeist $version', style: const TextStyle(color: Colors.white)),
+        content: const Text(
+            'Die neue App wird im Browser heruntergeladen. Danach die Datei antippen und installieren. '
+            'Einstellungen und Kopplung bleiben erhalten.',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Später')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Herunterladen')),
+        ],
+      ),
+    );
+    if (ok == true) await launchUrl(Uri.parse(update['apk_url'] as String), mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        onTap: () => _open(context),
+        child: Glass(
+          radius: 999,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.system_update_rounded, size: 18, color: Palette.acc),
+            const SizedBox(width: 8),
+            Text('Update ${update['version']} verfügbar', style: const TextStyle(fontSize: 14)),
+          ]),
+        ),
+      ),
+    );
   }
 }
 

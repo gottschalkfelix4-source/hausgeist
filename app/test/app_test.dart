@@ -2,11 +2,14 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smarthome_wall/core/device.dart';
-import 'package:smarthome_wall/core/home_store.dart';
-import 'package:smarthome_wall/display/motion_detector.dart';
-import 'package:smarthome_wall/ui/home_screen.dart';
-import 'package:smarthome_wall/voice/voice_service.dart';
+import 'package:hausgeist/core/api.dart';
+import 'package:hausgeist/core/config.dart';
+import 'package:hausgeist/core/device.dart';
+import 'package:hausgeist/core/home_store.dart';
+import 'package:hausgeist/display/motion_detector.dart';
+import 'package:hausgeist/ui/home_screen.dart';
+import 'package:hausgeist/ui/setup_screen.dart';
+import 'package:hausgeist/voice/voice_service.dart';
 
 void main() {
   group('Gerät aus Home Assistant', () {
@@ -102,6 +105,43 @@ void main() {
       await t.drag(find.text('Deckenlicht'), const Offset(-120, 0));
       await t.pump();
       expect(decke.bri, lessThan(before));
+    });
+  });
+
+  group('Update-Hinweis', () {
+    test('Versionen vergleichen', () {
+      expect(isNewerVersion('v0.3.0', '0.2.0'), isTrue);
+      expect(isNewerVersion('0.10.0', '0.9.9'), isTrue);
+      expect(isNewerVersion('v0.2.0', '0.2.0'), isFalse);
+      expect(isNewerVersion('0.1.9', '0.2.0'), isFalse);
+      expect(isNewerVersion('1.0', '0.9.0+5'), isTrue);
+    });
+  });
+
+  group('Einrichtung', () {
+    Future<void> pumpSetup(WidgetTester t, [AppConfig initial = const AppConfig()]) async {
+      await t.binding.setSurfaceSize(const Size(1280, 800));
+      await t.pumpWidget(MaterialApp(home: SetupScreen(initial: initial, onDone: (_) {})));
+    }
+
+    testWidgets('Kopplungscode ist der Standardweg', (t) async {
+      await pumpSetup(t);
+      expect(find.text('Kopplungscode'), findsOneWidget);
+      expect(find.text('Tablet-Token'), findsNothing);
+      await t.enterText(find.byType(TextField).first, 'http://hausgeist:8080');
+      await t.enterText(find.byType(TextField).last, '12ab3');
+      await t.tap(find.text('Verbinden'));
+      await t.pump();
+      expect(find.text('Der Kopplungscode hat 6 Ziffern.'), findsOneWidget);
+
+      await t.tap(find.text('Erweitert: Token eingeben'));
+      await t.pump();
+      expect(find.text('Tablet-Token'), findsOneWidget);
+    });
+
+    testWidgets('vorhandener Token öffnet direkt die erweiterte Ansicht', (t) async {
+      await pumpSetup(t, const AppConfig(server: 'http://x', token: 'abc'));
+      expect(find.text('Tablet-Token'), findsOneWidget);
     });
   });
 }

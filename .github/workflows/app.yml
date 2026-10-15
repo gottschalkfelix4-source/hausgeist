@@ -3,10 +3,14 @@ name: App
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths: ["app/**", ".github/workflows/app.yml"]
   pull_request:
     paths: ["app/**"]
   workflow_dispatch:
+
+permissions:
+  contents: write # APK an das Release haengen
 
 jobs:
   apk:
@@ -27,8 +31,46 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+
+      - name: Version pruefen (Tag = pubspec)
+        id: version
+        run: |
+          version=$(grep -m1 '^version:' pubspec.yaml | sed -E 's/version: *([^+]+).*/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF_NAME#v}" != "$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME passt nicht zu pubspec.yaml ($version)"; exit 1
+          fi
+
+      - name: Release-Schluessel bereitstellen
+        env:
+          KEYSTORE_BASE64: ${{ secrets.HAUSGEIST_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.HAUSGEIST_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then echo "::error::Release ohne Signatur-Schluessel"; exit 1; fi
+            echo "::warning::Kein Schluessel (z. B. Fork-PR): APK wird mit Debug-Schluessel signiert"; exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/hausgeist.jks"
+          {
+            echo "HAUSGEIST_KEYSTORE=$RUNNER_TEMP/hausgeist.jks"
+            echo "HAUSGEIST_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "HAUSGEIST_KEY_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "HAUSGEIST_KEY_ALIAS=hausgeist"
+          } >> "$GITHUB_ENV"
+
       - run: flutter build apk --release
+      - run: mv build/app/outputs/flutter-apk/app-release.apk "build/hausgeist-${{ steps.version.outputs.version }}.apk"
+      - run: rm -f "$RUNNER_TEMP/hausgeist.jks"
+        if: always()
+
       - uses: actions/upload-artifact@v4
         with:
           name: hausgeist-apk
-          path: app/build/app/outputs/flutter-apk/app-release.apk
+          path: app/build/hausgeist-*.apk
+
+      - name: An das GitHub-Release haengen
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/hausgeist-*.apk
+          fail_on_unmatched_files: true

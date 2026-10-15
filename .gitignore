@@ -16,3 +16,4 @@ app/android/app/.cxx/
 
 # Lokale Werkzeuge
 .claude/
+.pytest_cache/

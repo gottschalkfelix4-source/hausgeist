@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../display/display_controller.dart';
 import 'api.dart';
@@ -21,6 +22,10 @@ class HomeStore extends ChangeNotifier {
   List<Device> devices = [];
   bool connected = false;
   String? error;
+
+  /// Neuere App-Version auf GitHub (`version`, `apk_url`), sonst null.
+  Map<String, dynamic>? update;
+  DateTime? _updateChecked;
 
   bool get demo => api == null;
   List<Device> get tiles => devices.where((d) => d.kind != DeviceKind.sensor).toList();
@@ -54,7 +59,11 @@ class HomeStore extends ChangeNotifier {
         connected = true;
         error = null;
         notifyListeners();
+        unawaited(_checkUpdate());
         await done.future;
+        // 4000: Server hat Raum/Einstellungen geändert -> sofort neu laden.
+        if (api!.closeCode == 4000) continue;
+        if (api!.closeCode == 4401) error = 'Token ungültig';
       } catch (e) {
         error = '$e';
       }
@@ -78,6 +87,23 @@ class HomeStore extends ChangeNotifier {
     devices = list;
     final disp = me['display'];
     if (disp is Map) onDisplaySettings?.call(DisplaySettings.fromJson(disp.cast<String, dynamic>()));
+  }
+
+  /// Höchstens alle 12 Stunden nachsehen, ob es eine neuere App gibt.
+  Future<void> _checkUpdate() async {
+    final last = _updateChecked;
+    if (last != null && DateTime.now().difference(last) < const Duration(hours: 12)) return;
+    _updateChecked = DateTime.now();
+    try {
+      final latest = await api!.appUpdate();
+      final version = latest['version'] as String?;
+      final current = (await PackageInfo.fromPlatform()).version;
+      final newer = version != null && latest['apk_url'] != null && isNewerVersion(version, current);
+      update = newer ? latest : null;
+      if (!_disposed) notifyListeners();
+    } catch (_) {
+      // Kein Internet am Server o. ä.: kein Hinweis, beim nächsten Mal wieder.
+    }
   }
 
   void _onEvent(Map<String, dynamic> m) {
