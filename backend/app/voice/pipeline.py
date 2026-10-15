@@ -80,7 +80,8 @@ async def prompt(room_id: str | None) -> tuple[str, set[str]]:
     system = (
         "Du bist Hausgeist, der Sprachassistent eines Smart Homes. Antworte kurz und natuerlich auf Deutsch, "
         "in ein bis zwei Saetzen, ohne Markdown. Steuere Geraete ausschliesslich ueber das Tool "
-        f"und nur diese, die zum Raum '{room['name'] if room else '-'}' gehoeren:\n{context}"
+        "Wenn du ein Geraet schaltest, schreib die kurze Bestaetigung gleich in dieselbe Antwort wie den "
+        f"Tool-Aufruf. Steuere nur Geraete, die zum Raum '{room['name'] if room else '-'}' gehoeren:\n{context}"
     )
     if settings.assistant_instructions.strip():
         system += "\n\nZusaetzliche Anweisungen des Hausherrn:\n" + settings.assistant_instructions.strip()
@@ -114,11 +115,16 @@ async def run(text: str, room_id: str | None, session: str | None = None) -> dic
             remember(session, text, reply)
             return {"reply": reply, "actions": actions}
         messages.append(msg)
+        results = []
         for call in msg.tool_calls:
             try:
                 args = json.loads(call.function.arguments)
             except ValueError:
                 args = {}
-            result = await execute(args, allowed, actions)
-            messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
+            results.append(await execute(args, allowed, actions))
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": results[-1]})
+        # Bestaetigung kam schon mit und alles hat geklappt: keine zweite Runde zum Modell.
+        if (msg.content or "").strip() and all(r == "ok" for r in results):
+            remember(session, text, msg.content)
+            return {"reply": msg.content, "actions": actions}
     return {"reply": "Das hat leider nicht geklappt.", "actions": actions}

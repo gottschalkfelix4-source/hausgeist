@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     xai_api_key: str = ""
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""
-    elevenlabs_model: str = "eleven_multilingual_v2"
+    elevenlabs_model: str = "eleven_flash_v2_5"
 
     stt_provider: str = "openai"  # openai | xai
     stt_model: str = "gpt-4o-mini-transcribe"

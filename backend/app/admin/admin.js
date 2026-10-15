@@ -589,7 +589,7 @@ const FIELDS = {
   tts_provider: { label: 'Anbieter', type: 'select', options: { elevenlabs: 'ElevenLabs', openai: 'OpenAI', xai: 'Grok (xAI)' } },
   xai_voice: { label: 'Stimme', voices: 'xai', placeholder: 'eve', help: 'Die Liste erscheint mit dem xAI-Schlüssel. Eigene (geklonte) Stimmen per ID eintragen.', show: 'tts_provider=xai' },
   elevenlabs_voice_id: { label: 'Stimme', type: 'voice', help: 'Nach dem Eintragen des Schlüssels erscheint hier die Liste deiner Stimmen.', show: 'tts_provider=elevenlabs' },
-  elevenlabs_model: { label: 'Modell', list: ['eleven_multilingual_v2', 'eleven_flash_v2_5', 'eleven_turbo_v2_5'], help: 'Flash und Turbo antworten schneller, Multilingual klingt am natürlichsten.', show: 'tts_provider=elevenlabs' },
+  elevenlabs_model: { label: 'Modell', list: ['eleven_flash_v2_5', 'eleven_turbo_v2_5', 'eleven_multilingual_v2'], help: 'Flash antwortet am schnellsten (Standard). Multilingual klingt etwas natürlicher, braucht aber spürbar länger.', show: 'tts_provider=elevenlabs' },
   openai_tts_voice: { label: 'Stimme', type: 'select', options: Object.fromEntries(['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer'].map((v) => [v, v[0].toUpperCase() + v.slice(1)])), show: 'tts_provider=openai' },
   openai_tts_model: { label: 'Modell', list: ['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'], show: 'tts_provider=openai' },
   voice_mode: { label: 'Betriebsart', type: 'select', options: { pipeline: 'Klassisch: Spracherkennung → Sprachmodell → Stimme', live: 'Live-Sprachmodell: hört und spricht selbst' } },

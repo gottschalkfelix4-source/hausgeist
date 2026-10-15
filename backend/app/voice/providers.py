@@ -3,6 +3,8 @@
 Alle Funktionen nehmen optional eine eigene Konfiguration, damit die Verwaltung
 ungespeicherte Werte ausprobieren kann.
 """
+import asyncio
+
 import httpx
 from openai import AsyncOpenAI
 
@@ -12,16 +14,43 @@ XAI_URL = "https://api.x.ai/v1"
 ELEVENLABS_URL = "https://api.elevenlabs.io/v1"
 
 
+# Clients bleiben offen, damit nicht jeder Sprachbefehl erst neue TLS-Verbindungen aufbaut.
+# Pro Event-Loop, weil Verbindungen an ihren Loop gebunden sind.
+_clients: dict[tuple, tuple[asyncio.AbstractEventLoop, object]] = {}
+
+
+def _cached(key: tuple, make):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return make()
+    hit = _clients.get(key)
+    if hit and hit[0] is loop:
+        return hit[1]
+    if len(_clients) > 16:
+        _clients.clear()
+    client = make()
+    _clients[key] = (loop, client)
+    return client
+
+
+def _openai(api_key: str, base_url: str | None = None) -> AsyncOpenAI:
+    return _cached(("openai", api_key, base_url), lambda: AsyncOpenAI(api_key=api_key, base_url=base_url))
+
+
+def _http() -> httpx.AsyncClient:
+    return _cached(("http",), lambda: httpx.AsyncClient(timeout=60))
+
+
 def llm_client(cfg: Settings | None = None) -> tuple[AsyncOpenAI, str]:
     """OpenAI, xAI (Grok) und eigene Server wie Ollama sprechen alle das OpenAI-Chat-Protokoll."""
     cfg = cfg or settings
     if cfg.llm_provider == "xai":
-        return AsyncOpenAI(api_key=cfg.xai_api_key, base_url=XAI_URL), cfg.xai_llm_model
+        return _openai(cfg.xai_api_key, XAI_URL), cfg.xai_llm_model
     if cfg.llm_provider == "custom":
         # Viele lokale Server brauchen keinen Schluessel, der Client aber einen Wert.
-        return (AsyncOpenAI(api_key=cfg.custom_llm_api_key or "none", base_url=cfg.custom_llm_url),
-                cfg.custom_llm_model)
-    return AsyncOpenAI(api_key=cfg.openai_api_key), cfg.openai_llm_model
+        return _openai(cfg.custom_llm_api_key or "none", cfg.custom_llm_url), cfg.custom_llm_model
+    return _openai(cfg.openai_api_key), cfg.openai_llm_model
 
 
 def _xai_headers(cfg: Settings) -> dict:
@@ -34,13 +63,12 @@ async def transcribe(audio: bytes, filename: str, cfg: Settings | None = None) -
         data = {"model": cfg.xai_stt_model, "format": "true"}
         if cfg.stt_language:
             data["language"] = cfg.stt_language
-        async with httpx.AsyncClient(timeout=60) as http:
-            # Die Datei muss das letzte Feld sein; httpx haengt files hinter data an.
-            r = await http.post(f"{XAI_URL}/stt", headers=_xai_headers(cfg), data=data,
-                                files={"file": (filename, audio)})
-            r.raise_for_status()
+        # Die Datei muss das letzte Feld sein; httpx haengt files hinter data an.
+        r = await _http().post(f"{XAI_URL}/stt", headers=_xai_headers(cfg), data=data,
+                               files={"file": (filename, audio)})
+        r.raise_for_status()
         return r.json().get("text", "")
-    client = AsyncOpenAI(api_key=cfg.openai_api_key)
+    client = _openai(cfg.openai_api_key)
     extra = {"language": cfg.stt_language} if cfg.stt_language else {}
     res = await client.audio.transcriptions.create(model=cfg.stt_model, file=(filename, audio), **extra)
     return res.text
@@ -50,22 +78,22 @@ async def synthesize(text: str, cfg: Settings | None = None) -> tuple[bytes, str
     """Gibt (audio_bytes, mime_type) zurueck."""
     cfg = cfg or settings
     if cfg.tts_provider == "elevenlabs":
-        async with httpx.AsyncClient(timeout=60) as http:
-            r = await http.post(
-                f"{ELEVENLABS_URL}/text-to-speech/{cfg.elevenlabs_voice_id}",
-                headers={"xi-api-key": cfg.elevenlabs_api_key},
-                json={"text": text, "model_id": cfg.elevenlabs_model},
-            )
-            r.raise_for_status()
-            return r.content, "audio/mpeg"
+        # Kleineres MP3 (22 kHz, 32 kbit/s) reicht für Sprache und ist schneller auf dem Tablet.
+        r = await _http().post(
+            f"{ELEVENLABS_URL}/text-to-speech/{cfg.elevenlabs_voice_id}",
+            params={"output_format": "mp3_22050_32"},
+            headers={"xi-api-key": cfg.elevenlabs_api_key},
+            json={"text": text, "model_id": cfg.elevenlabs_model},
+        )
+        r.raise_for_status()
+        return r.content, "audio/mpeg"
     if cfg.tts_provider == "xai":
-        async with httpx.AsyncClient(timeout=60) as http:
-            r = await http.post(f"{XAI_URL}/tts", headers=_xai_headers(cfg),
-                                json={"text": text, "voice_id": cfg.xai_voice or "eve",
-                                      "language": cfg.stt_language or "auto"})
-            r.raise_for_status()
-            return r.content, "audio/mpeg"
-    client = AsyncOpenAI(api_key=cfg.openai_api_key)
+        r = await _http().post(f"{XAI_URL}/tts", headers=_xai_headers(cfg),
+                               json={"text": text, "voice_id": cfg.xai_voice or "eve",
+                                     "language": cfg.stt_language or "auto"})
+        r.raise_for_status()
+        return r.content, "audio/mpeg"
+    client = _openai(cfg.openai_api_key)
     res = await client.audio.speech.create(model=cfg.openai_tts_model, voice=cfg.openai_tts_voice, input=text)
     return res.content, "audio/mpeg"
 

@@ -281,8 +281,11 @@ class VoiceService extends ChangeNotifier with WidgetsBindingObserver {
       phase = VoicePhase.speaking;
       notifyListeners();
       if (r.audio != null) {
+        // Vor dem Abspielen abonnieren, sonst geht das Ende kurzer Antworten verloren.
+        // onPlayerComplete ist zur Laufzeit ein Future<AudioEvent>, darum erst auf void abbilden.
+        final done = _player.onPlayerComplete.first.then((_) {});
         await _player.play(BytesSource(Uint8List.fromList(r.audio!), mimeType: r.mime));
-        await _player.onPlayerComplete.first.timeout(const Duration(seconds: 60), onTimeout: () {});
+        await done.timeout(const Duration(seconds: 60), onTimeout: () {});
       }
       if (session == _session) _finish();
     } catch (e) {

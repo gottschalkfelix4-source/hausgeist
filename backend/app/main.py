@@ -742,18 +742,31 @@ def _classic_ready() -> bool:
     return providers.stt_ready(settings) and providers.llm_ready(settings)
 
 
-async def _voice(text: str, tab) -> dict:
+def _took(t0: float) -> str:
+    return f"{time.perf_counter() - t0:.1f} s".replace(".", ",")
+
+
+async def _voice(text: str, tab, steps: list[str] | None = None) -> dict:
+    steps = steps if steps is not None else []
+    t0 = time.perf_counter()
     result = await pipeline.run(text, tab["room_id"], tab["id"])
-    if not providers.tts_ready(settings):
-        return result  # ohne Stimme: Antwort nur als Text auf dem Tablet
-    audio, mime = await providers.synthesize(result["reply"])
-    return {**result, "audio_base64": base64.b64encode(audio).decode(), "mime": mime}
+    steps.append(f"Antwort {_took(t0)}")
+    if providers.tts_ready(settings):
+        t0 = time.perf_counter()
+        audio, mime = await providers.synthesize(result["reply"])
+        steps.append(f"Stimme {_took(t0)}")
+        result = {**result, "audio_base64": base64.b64encode(audio).decode(), "mime": mime}
+    # ohne Stimme: Antwort nur als Text auf dem Tablet
+    log.info("Sprachbefehl von %s: %s", tab["name"], " · ".join(steps))
+    return result
 
 
 async def _live(tab, *, pcm: bytes | None = None, text: str | None = None) -> dict | None:
     """Live-Sprachmodell; None, wenn es scheitert und der klassische Weg einspringen kann."""
     try:
+        t0 = time.perf_counter()
         turn = await live.converse(pcm=pcm, text=text, room_id=tab["room_id"], session=tab["id"])
+        log.info("Sprachbefehl von %s: Live-Modell %s", tab["name"], _took(t0))
         return turn.response()
     except Exception as e:  # noqa: BLE001
         log.warning("Live-Sprachmodell: %s", _error(e))
@@ -774,10 +787,12 @@ async def voice_audio(file: UploadFile, tab=Depends(tablet)):
     data = await file.read()
     if _live_on() and (pcm := live.read_wav(data)) is not None and (r := await _live(tab, pcm=pcm)):
         return r
+    t0 = time.perf_counter()
     text = await providers.transcribe(data, file.filename or "audio.m4a")
+    steps = [f"Erkennung {_took(t0)}"]
     if not text.strip():
         return {"transcript": "", "reply": "Ich habe nichts verstanden.", "actions": []}
-    return {"transcript": text, **await _voice(text, tab)}
+    return {"transcript": text, **await _voice(text, tab, steps)}
 
 
 @app.get("/health")

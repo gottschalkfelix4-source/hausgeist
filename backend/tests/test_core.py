@@ -98,6 +98,22 @@ def test_pipeline_controls_only_room_devices(client, room, fake_ha, monkeypatch)
     assert "light.kueche" not in llm.calls[0][0]["content"]
 
 
+def test_pipeline_skips_second_round_when_confirmed(client, room, fake_ha, monkeypatch):
+    # Bestaetigung kommt mit dem Tool-Aufruf: kein zweiter Modellaufruf
+    llm = FakeLLM(_msg("Licht ist an.", tool_calls=[_tool_call("light.wohnzimmer", "on")]))
+    monkeypatch.setattr(pipeline, "llm_client", lambda: (llm, "m"))
+    r = asyncio.run(pipeline.run("Licht an", room["id"], "t1"))
+    assert r["reply"] == "Licht ist an." and len(llm.calls) == 1
+    assert [c[:2] for c in fake_ha.commands] == [("light.wohnzimmer", "on")]
+
+    # Fehlgeschlagen: das Modell darf den Fehler noch erklaeren
+    llm = FakeLLM(_msg("Mache ich.", tool_calls=[_tool_call("light.kueche", "on")]),
+                  _msg("Das Gerät ist in einem anderen Raum."))
+    monkeypatch.setattr(pipeline, "llm_client", lambda: (llm, "m"))
+    r = asyncio.run(pipeline.run("Küche an", room["id"], "t2"))
+    assert r["reply"] == "Das Gerät ist in einem anderen Raum." and len(llm.calls) == 2
+
+
 def test_pipeline_remembers_short_conversation(client, room, monkeypatch):
     llm = FakeLLM(_msg("Erledigt."), _msg("Heller gemacht."), _msg("Hallo."))
     monkeypatch.setattr(pipeline, "llm_client", lambda: (llm, "m"))

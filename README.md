@@ -327,7 +327,7 @@ der Variable.** Neben jedem Feld steht, woher der aktuelle Wert kommt. Mit **Zur
 | `OPENAI_API_KEY` | – | OpenAI (STT, optional LLM, TTS und GPT-Live) |
 | `XAI_API_KEY` | – | xAI / Grok (LLM, STT, TTS, Grok Voice) |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | – | ElevenLabs-Stimme |
-| `ELEVENLABS_MODEL` | `eleven_multilingual_v2` | ElevenLabs-Modell |
+| `ELEVENLABS_MODEL` | `eleven_flash_v2_5` | ElevenLabs-Modell (`eleven_multilingual_v2` klingt natürlicher, ist aber langsamer) |
 | `STT_PROVIDER`, `STT_MODEL`, `STT_LANGUAGE` | `openai`, `gpt-4o-mini-transcribe`, `de` | Spracherkennung (`openai` oder `xai`) |
 | `XAI_STT_MODEL` | `grok-voice-transcribe-2.0` | Spracherkennung für `xai` |
 | `LLM_PROVIDER` | `openai` | `openai`, `xai` oder `custom` |
