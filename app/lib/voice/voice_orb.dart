@@ -151,12 +151,16 @@ class _VoiceOrbState extends State<VoiceOrb> with SingleTickerProviderStateMixin
   late final Ticker _ticker = createTicker(_tick);
   final _state = OrbState();
   Duration _last = Duration.zero;
+  FragmentShader? _shader;
 
   @override
   void initState() {
     super.initState();
     widget.voice.addListener(_sync);
     _sync();
+    OrbShader.load().then((p) {
+      if (mounted && p != null) setState(() => _shader = p.fragmentShader());
+    });
   }
 
   @override
@@ -188,40 +192,107 @@ class _VoiceOrbState extends State<VoiceOrb> with SingleTickerProviderStateMixin
   void dispose() {
     widget.voice.removeListener(_sync);
     _ticker.dispose();
+    _shader?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => RepaintBoundary(
-        child: CustomPaint(size: Size.square(widget.size), painter: OrbPainter(_state)),
+        child: CustomPaint(
+          size: Size.square(widget.size),
+          painter: _shader == null ? OrbPainter(_state) : ShaderOrbPainter(_state, _shader!),
+        ),
       );
 }
 
+/// Lädt shaders/orb.frag einmal. Klappt das nicht (alte Grafik, Tests), bleibt es bei [OrbPainter].
+class OrbShader {
+  static Future<FragmentProgram?>? _program;
+
+  static Future<FragmentProgram?> load() => _program ??= FragmentProgram.fromAsset('shaders/orb.frag')
+          .then<FragmentProgram?>((p) => p)
+          .catchError((Object e) {
+        debugPrint('Kugel-Shader nicht verfügbar: $e');
+        return null;
+      });
+}
+
+/// Kugel als Flüssigkeit auf der Grafikkarte, siehe shaders/orb.frag.
+class ShaderOrbPainter extends CustomPainter {
+  ShaderOrbPainter(this.s, this.shader);
+  final OrbState s;
+  final FragmentShader shader;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    shader
+      ..setFloat(0, c.dx)
+      ..setFloat(1, c.dy)
+      ..setFloat(2, size.shortestSide / 2)
+      ..setFloat(3, s.t)
+      ..setFloat(4, s.level.clamp(0.0, 1.2))
+      ..setFloat(5, s.think)
+      ..setFloat(6, s.scale)
+      ..setFloat(7, s.spin);
+    // Etwas größer als das Widget zeichnen, damit das Leuchten Platz hat.
+    canvas.drawRect(Rect.fromCenter(center: c, width: size.width * 1.5, height: size.height * 1.5), Paint()..shader = shader);
+  }
+
+  @override
+  bool shouldRepaint(ShaderOrbPainter old) => true;
+}
+
 /// Bewegung der Kugel, getrennt vom Zeichnen (für Tests und die Web-Vorschau).
+///
+/// Pegel und Größe hängen an gedämpften Federn: Sie folgen der Stimme weich, schwingen ein
+/// wenig nach wie Wasser und springen nie.
 class OrbState {
   double t = 0; // Sekunden
   double level = 0; // geglätteter Pegel 0..1
-  double spin = 0; // Drehung der Farbflecken
-  double think = 0; // 0..1, Übergang zum Kreisen
+  double spin = 0; // Drehung der Farben
+  double think = 0; // 0..1, Übergang zum Strudel
   double scale = 0.6; // wächst beim Öffnen auf
+  double _levelV = 0, _scaleV = 0, _spinV = 0.35;
+
+  /// Stimme beim Antworten: überlagerte langsame Wellen statt hartem Takt, klingt wie Silben.
+  static double speech(double t) {
+    final syllables = 0.5 + 0.5 * math.sin(t * 7.3) * math.sin(t * 2.9 + 0.7);
+    final phrase = 0.65 + 0.35 * math.sin(t * 1.1 + 1.0);
+    return 0.2 + 0.32 * syllables * phrase;
+  }
 
   void step(double dt, VoicePhase phase, double input) {
     t += dt;
     final target = switch (phase) {
       VoicePhase.listening => input,
-      // Beim Antworten pulsiert die Kugel wie eine Stimme.
-      VoicePhase.speaking =>
-        0.28 + 0.22 * (math.sin(t * 9.0).abs() * (0.55 + 0.45 * math.sin(t * 2.3 + 1)).abs()),
+      VoicePhase.speaking => speech(t),
       _ => 0.0,
     };
-    // Schnell rauf, langsam runter, damit es lebendig, aber nicht zappelig wirkt.
-    final k = target > level ? 0.45 : 0.12;
-    level += (target - level) * (1 - math.pow(1 - k, dt * 60));
+    // Rauf straff, runter weicher. Leicht unterdämpft, damit es nachschwappt.
+    final up = target > level;
+    level = _spring(level, target, dt, up ? 150 : 45, up ? 0.8 : 0.9, (v) => _levelV = v, _levelV);
     final thinking = phase == VoicePhase.thinking ? 1.0 : 0.0;
     think += (thinking - think) * (1 - math.pow(0.9, dt * 60));
-    spin += dt * (0.35 + 0.9 * level + 2.4 * think);
+    // Auch die Drehung beschleunigt und bremst weich.
+    final spinTarget = 0.35 + 0.9 * level + 2.4 * think;
+    _spinV += (spinTarget - _spinV) * (1 - math.pow(0.95, dt * 60));
+    spin += dt * _spinV;
     final s = phase == VoicePhase.done ? 0.92 : 1.0;
-    scale += (s - scale) * (1 - math.pow(0.86, dt * 60));
+    scale = _spring(scale, s, dt, 90, 0.55, (v) => _scaleV = v, _scaleV);
+  }
+
+  /// Gedämpfte Feder (Steifigkeit [k], Dämpfungsgrad [zeta]), in kleinen Schritten gerechnet.
+  static double _spring(double x, double target, double dt, double k, double zeta, void Function(double) setV, double v) {
+    const h = 1 / 240;
+    final c = 2 * zeta * math.sqrt(k);
+    for (var left = dt; left > 1e-9; left -= h) {
+      final step = math.min(h, left);
+      v += ((target - x) * k - v * c) * step;
+      x += v * step;
+    }
+    setV(v);
+    return x;
   }
 }
 

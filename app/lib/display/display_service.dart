@@ -7,9 +7,14 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'display_controller.dart';
 import 'motion_detector.dart';
+import 'screen_control.dart';
 
 /// Verbindet den [DisplayController] mit Android: Wakelock, Fensterhelligkeit,
 /// Lichtsensor und Kamera. Die UI hört auf [state] und [nightTheme].
+///
+/// "Aus" heißt mit Freigabe als Geräteadministrator ([screenAdmin]): Bildschirm wirklich aus,
+/// die Kamera schaut im Hintergrund weiter nach Bewegung und schaltet ihn wieder ein.
+/// Ohne Freigabe: Helligkeit 0 und schwarzes Bild.
 class DisplayService extends ChangeNotifier with WidgetsBindingObserver {
   DisplayService([DisplaySettings settings = const DisplaySettings()]) : ctrl = DisplayController(settings);
 
@@ -23,12 +28,40 @@ class DisplayService extends ChangeNotifier with WidgetsBindingObserver {
   double _current = -1; // zuletzt gesetzte Helligkeit
   DisplayState _lastState = DisplayState.active;
   bool _lastNight = false;
+  final ScreenControl screen = ScreenControl();
+  Timer? _offTimer;
+  bool _offByUs = false; // Bildschirm ist gerade von uns ausgeschaltet
+  bool _resumed = true;
 
   DisplayState get state => ctrl.state;
   bool get nightTheme => ctrl.nightTheme;
 
+  /// Bildschirm ist wirklich aus (Mikrofon und Verbindung sollen trotzdem weiterlaufen).
+  bool get screenOff => _offByUs;
+
+  /// Schalter "Bildschirm ganz ausschalten" anzeigen (nur auf Android).
+  bool get screenSupported => screen.supported;
+  bool get screenAdmin => screen.admin;
+
+  /// Freigabe zurücknehmen (vor dem Deinstallieren nötig).
+  Future<void> disableScreenOff() async {
+    await screen.removeAdmin();
+    notifyListeners();
+  }
+
+  /// Freigabe neu abfragen, z. B. nach der Rückkehr aus dem Android-Dialog.
+  Future<void> refreshScreen() async {
+    final before = (screen.supported, screen.admin);
+    if (await screen.refresh()) unawaited(screen.keepAlive());
+    if ((screen.supported, screen.admin) != before) notifyListeners();
+  }
+
   Future<void> start() async {
     WidgetsBinding.instance.addObserver(this);
+    screen
+      ..onMotion = _onScreenMotion
+      ..listen();
+    await refreshScreen();
     await WakelockPlus.enable();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       ctrl.tick();
@@ -73,16 +106,53 @@ class DisplayService extends ChangeNotifier with WidgetsBindingObserver {
     _apply();
   }
 
+  /// Kamera hat bei ausgeschaltetem Bildschirm jemanden gesehen (Android schaltet schon ein).
+  void _onScreenMotion() {
+    ctrl.onActivity();
+    _apply();
+  }
+
+  /// Sprachassistent ist aufgegangen.
+  void activity() {
+    ctrl.onActivity();
+    _apply();
+  }
+
   void _onLuma(double luma) {
     if (!_hasLightSensor) ctrl.onCameraLuma(luma);
   }
 
   void _apply() {
+    if (ctrl.state != _lastState) {
+      ctrl.state == DisplayState.off ? _scheduleOff() : _screenOn();
+    }
     if (ctrl.state != _lastState || ctrl.nightTheme != _lastNight) {
       _lastState = ctrl.state;
       _lastNight = ctrl.nightTheme;
       notifyListeners();
     }
+  }
+
+  /// Erst langsam abdunkeln, dann wirklich ausschalten.
+  void _scheduleOff() {
+    _offTimer?.cancel();
+    if (!screen.admin) return;
+    _offTimer = Timer(const Duration(seconds: 3), () async {
+      if (ctrl.state != DisplayState.off || _offByUs) return;
+      // Die Kamera übergibt an die Bewegungserkennung von Android, die auch bei dunklem Bildschirm läuft.
+      _offByUs = true;
+      await _motion.stop();
+      if (ctrl.state == DisplayState.off && await screen.off(watch: ctrl.settings.useCamera)) return;
+      _offByUs = false;
+      if (ctrl.settings.useCamera && _resumed) unawaited(_motion.start());
+    });
+  }
+
+  void _screenOn() {
+    _offTimer?.cancel();
+    if (!_offByUs) return;
+    _offByUs = false;
+    unawaited(screen.on());
   }
 
   /// Helligkeit sanft nachführen: aufwachen schnell, dimmen langsam.
@@ -106,11 +176,17 @@ class DisplayService extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _resumed = true;
       WakelockPlus.enable();
-      if (ctrl.settings.useCamera) _motion.start();
       ctrl.onTouch();
       _apply();
+      unawaited(refreshScreen());
+      // Kurz warten, bis die Bewegungserkennung von Android die Kamera freigegeben hat.
+      Future<void>.delayed(const Duration(milliseconds: 800), () {
+        if (_resumed && ctrl.settings.useCamera && !_offByUs) _motion.start();
+      });
     } else if (state == AppLifecycleState.paused) {
+      _resumed = false;
       _motion.stop();
     }
   }
@@ -120,6 +196,7 @@ class DisplayService extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     _ramp?.cancel();
+    _offTimer?.cancel();
     _lux?.cancel();
     _motion.stop();
     ScreenBrightness().resetApplicationScreenBrightness().catchError((_) {});

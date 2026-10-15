@@ -157,4 +157,14 @@ void main() {
     c.onTouch();
     expect((c.recentlySeen, c.someoneNear), (true, true));
   });
+
+  test('Sprachbefehl weckt, hält den Raum aber nicht für immer besetzt', () {
+    advance(const Duration(seconds: 200));
+    expect(c.state, DisplayState.off);
+    c.onActivity();
+    expect(c.state, DisplayState.active);
+    expect(c.recentlySeen, isTrue);
+    advance(const Duration(seconds: 130)); // Haltezeit 90 s + 120 s unbedient
+    expect(c.state, DisplayState.off);
+  });
 }

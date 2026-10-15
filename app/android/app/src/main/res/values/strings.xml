@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_admin_label">Hausgeist Bildschirm</string>
+    <string name="screen_admin_description">Schaltet den Bildschirm ganz aus, wenn niemand im Raum ist, und bei Bewegung wieder ein.</string>
+</resources>

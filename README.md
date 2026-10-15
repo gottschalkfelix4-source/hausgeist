@@ -218,8 +218,19 @@ unter *Einstellungen → System* ein neues Passwort festlegen. Danach `ADMIN_KEY
 
 ## Display-Verhalten
 
-Das Tablet bleibt **immer wach**. „Aus“ heißt: Helligkeit 0 und schwarzer Bildschirm. So läuft die
-Kamera weiter und das Tablet reagiert sofort.
+Wenn lange niemand das Tablet bedient und niemand im Raum ist, geht der Bildschirm **ganz aus**. Sobald
+die Kamera Bewegung sieht, der Präsenzmelder anschlägt oder jemand das Aktivierungswort sagt, geht er
+wieder an. Verbindung, Kamera und Mikrofon laufen dabei im Hintergrund weiter (stille Benachrichtigung
+„Hausgeist“).
+
+Dafür braucht die App einmal die Freigabe als **Geräteadministrator**. Sie fragt beim ersten Start
+danach, sonst: lange auf die Uhr tippen → *Bildschirm ganz ausschalten*. Genutzt wird davon nur
+„Bildschirm sperren“. Am besten steht die Displaysperre des Tablets auf *Keine* oder *Wischen*.
+**Vor dem Deinstallieren** den Schalter wieder ausmachen, sonst lässt Android die App nicht löschen.
+Ohne Freigabe heißt „aus“ wie bisher: Helligkeit 0 und schwarzer Bildschirm.
+
+In einem stockdunklen Raum sieht die Kamera keine Bewegung. Zuverlässiger weckt dort ein Präsenzmelder
+aus Home Assistant.
 
 | Zustand | Wann | Helligkeit |
 |---|---|---|

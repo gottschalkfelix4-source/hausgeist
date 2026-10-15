@@ -40,9 +40,10 @@ Geräte (Zigbee, Hue, Klima, ...) -> Home Assistant (Unraid)
 - Pro Tablet einstellbar: `wake_mode` = `camera` | `sensor` | `both` (`PUT /api/tablets/{id}/display`).
 
 ## Display-Verhalten (Dauer-wach, dimmen, Nacht)
-Das Tablet bleibt **immer wach** (Wakelock, Kiosk). „Aus“ heißt: Fensterhelligkeit 0 + schwarzes
-Overlay. Echtes Abschalten würde die Kamera stoppen. Die Logik steckt in
-`app/lib/display/display_controller.dart` (reines Dart, getestet in `app/test/`).
+Das Tablet bleibt wach (Wakelock, Kiosk), solange jemand da ist. Im Zustand `off` schaltet die App den
+Bildschirm wirklich aus, wenn sie Geräteadministrator ist (siehe unten), sonst Fensterhelligkeit 0 +
+schwarzes Overlay. Die Logik steckt in `app/lib/display/display_controller.dart` (reines Dart,
+getestet in `app/test/`).
 
 | Zustand | Wann | Helligkeit |
 |---|---|---|
@@ -84,6 +85,17 @@ Overlay. Echtes Abschalten würde die Kamera stoppen. Die Logik steckt in
 - `camera` liefert ein kleines YUV-Bild der Frontkamera mit ca. 5 fps. Nur der Y-Kanal wird auf
   ein 32×24-Raster verkleinert und mit dem vorigen verglichen. Die Bilder bleiben im Speicher.
 - Ein Ticker ruft jede Sekunde `tick()` auf.
+
+**Echtes Ausschalten** (`screen_control.dart` ↔ `android/.../Screen.kt`, Kanal `hausgeist/screen`):
+- `ScreenAdmin` ist ein `DeviceAdminReceiver` nur mit `force-lock`. Die App fragt einmal danach
+  (Tablet-Einstellungen: lange auf die Uhr tippen).
+- `KeepAwakeService` ist ein Vordergrunddienst (Typen camera/microphone/specialUse), damit Verbindung,
+  Aktivierungswort und Kamera weiterlaufen, während der Bildschirm aus ist.
+- Bei `off` dunkelt die App 3 s ab, gibt die Kamera frei und ruft `lockNow()`. Dann übernimmt
+  `MotionWatcher` (Camera2, gleiche 32×24-Rechnung wie in Dart, 3 s Blindzeit, 2 Bewegungsbilder
+  in 1,5 s). Bei Bewegung weckt ein `ACQUIRE_CAUSES_WAKEUP`-Wakelock den Bildschirm, die Activity
+  erscheint über dem Sperrbildschirm (`showWhenLocked`) und Dart bekommt `motion`.
+- Präsenzmelder (`wake` vom Server) und Aktivierungswort wecken über denselben Weg (`on`).
 
 ## Kopplung und Sicherheit
 1. Die Verwaltung legt ein Tablet an (`POST /api/tablets`). Der Server erzeugt einen zufälligen Token
@@ -180,14 +192,17 @@ Pegel-Endpunkt (`audio_tools.dart`, Grundrauschen adaptiv, Sprache = 9 dB darüb
 nach 0,9 s Pause, nach 5 s ohne Sprache oder nach 12 s. Der eigene Signalton zählt nicht. Die Aufnahme
 geht als WAV an `POST /api/voice/audio`.
 
-**Kugel:** `lib/voice/voice_orb.dart` legt sich über alles (auch über den schwarzen Vorhang). Unscharfer
-Hintergrund, vier Farbflecken (Bernstein, Koralle, Violett, Cyan) mit additiver Überblendung in einem
-weich wabernden Umriss. Beim Zuhören folgt sie dem Mikrofonpegel, beim Nachdenken kreist ein Lichtbogen,
-beim Antworten pulsiert sie. Phasen: `idle → waiting → listening → thinking → speaking → done`.
+**Kugel:** `lib/voice/voice_orb.dart` legt sich über alles (auch über den schwarzen Vorhang). Gezeichnet
+wird sie vom Fragment-Shader `app/shaders/orb.frag`: verwirbelte Flüssigkeit (Domain Warping) in
+Bernstein, Koralle, Violett und Cyan, Lichtadern wie in einem Pool, Glasrand und Glanzlicht, weich
+wabernder Umriss. Beim Zuhören laufen Wellenringe mit der Stimme, beim Nachdenken dreht sich ein
+Strudel mit kreisendem Lichtschweif, beim Antworten bewegt sie sich wie Sprache. Pegel und Größe hängen
+an gedämpften Federn (`OrbState`). Lässt sich der Shader nicht laden, zeichnet `OrbPainter` die alte
+Variante. Phasen: `idle → waiting → listening → thinking → speaking → done`.
 
 ## App-Updates
 `GET /api/app/update` liefert das neueste GitHub-Release aus `UPDATE_REPO` (Version, APK-Link).
-Es wird 6 Stunden gecacht, nach einem Fehler 1 Stunde. Die App fragt höchstens alle 12 Stunden,
+Es wird 30 Minuten gecacht. Die App fragt bei jeder Verbindung und dann stündlich,
 vergleicht mit ihrer eigenen Version (`package_info_plus`) und zeigt bei Bedarf einen Hinweis. Der
 öffnet die APK im Browser (`url_launcher`). Weil alle Releases mit demselben Schlüssel signiert
 sind, installiert Android sie als Update.

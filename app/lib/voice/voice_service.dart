@@ -18,7 +18,7 @@ enum VoicePhase { idle, waiting, listening, thinking, speaking, done }
 /// Sprachassistent: Aktivierungswort (offline) oder Mikrofon-Knopf → Befehl aufnehmen, bis man
 /// aufhört zu sprechen → Server (Spracherkennung, Assistent, Stimme) → Antwort abspielen.
 class VoiceService extends ChangeNotifier with WidgetsBindingObserver {
-  VoiceService(this.store, {this.onActive, this.presence});
+  VoiceService(this.store, {this.onActive, this.presence, this.screenOff});
 
   final HomeStore store;
 
@@ -27,6 +27,9 @@ class VoiceService extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Kamera/Berührung: Ist gerade jemand hier bzw. direkt davor? Hilft bei der Wahl des Tablets.
   final ({bool seen, bool near}) Function()? presence;
+
+  /// Bildschirm ist von Hausgeist ausgeschaltet: Aktivierungswort weiter hören, statt anzuhalten.
+  final bool Function()? screenOff;
 
   final _rec = AudioRecorder();
   final _player = AudioPlayer();
@@ -357,6 +360,7 @@ class VoiceService extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
+      if (screenOff?.call() ?? false) return;
       _paused = true;
       if (visible || phase == VoicePhase.waiting) close();
       unawaited(_stopMic());

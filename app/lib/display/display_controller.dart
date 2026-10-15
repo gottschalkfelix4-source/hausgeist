@@ -3,7 +3,7 @@ import 'dart:math' as math;
 /// Zustand des Wanddisplays.
 /// - [active]: jemand bedient das Tablet, volle (umgebungsabhängige) Helligkeit
 /// - [idle]:   Raum besetzt, aber niemand tippt -> gedimmt, bleibt aber an
-/// - [off]:    niemand da und nichts bedient -> Helligkeit 0, schwarzer Bildschirm
+/// - [off]:    niemand da und nichts bedient -> Bildschirm aus (bzw. Helligkeit 0 und schwarz)
 enum DisplayState { active, idle, off }
 
 /// Einstellungen kommen vom Backend (`/api/me` -> `display`).
@@ -161,6 +161,13 @@ class DisplayController {
     _sensorPresent = present;
     _lastPresence = _clock(); // beim Wechsel auf "leer" startet die Haltezeit jetzt
     if (present && _state == DisplayState.off) _wake();
+  }
+
+  /// Jemand spricht mit dem Tablet, oder die Kamera hat es bei ausgeschaltetem Bildschirm geweckt.
+  /// Zählt wie eine Bewegung: Der Raum gilt danach noch [DisplaySettings.presenceHold] als besetzt.
+  void onActivity() {
+    _lastPresence = _lastSeen = _clock();
+    _wake();
   }
 
   /// `{"type":"wake"}` vom Backend.

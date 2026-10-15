@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/api.dart';
 import 'core/config.dart';
@@ -56,12 +57,44 @@ class _WallAppState extends State<WallApp> {
     _store = store;
     _voice = VoiceService(
       store,
-      onActive: _display.wake,
+      onActive: _display.activity,
       presence: () => (seen: _display.ctrl.recentlySeen, near: _display.ctrl.someoneNear),
+      screenOff: () => _display.screenOff,
     );
     store.start();
     _voice!.start();
+    if (!_config.demo) _offerScreenOff();
   }
+
+  /// Einmalig fragen, ob der Bildschirm ganz ausgehen darf (braucht eine Android-Freigabe).
+  Future<void> _offerScreenOff() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('screen_off_offered') ?? false) return;
+    await _display.refreshScreen();
+    if (!_display.screenSupported || _display.screenAdmin || !mounted) return;
+    await Future<void>.delayed(const Duration(seconds: 2));
+    final ctx = _nav.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    await prefs.setBool('screen_off_offered', true);
+    if (!ctx.mounted) return;
+    final ok = await showDialog<bool>(
+      context: ctx,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bildschirm ganz ausschalten?'),
+        content: const Text(_screenOffText),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Nicht jetzt')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Weiter')),
+        ],
+      ),
+    );
+    if (ok == true) await _display.screen.requestAdmin();
+  }
+
+  static const _screenOffText = 'Wenn lange niemand das Tablet bedient und niemand im Raum ist, geht der Bildschirm '
+      'ganz aus. Sobald die Kamera Bewegung sieht oder der Präsenzmelder anschlägt, geht er wieder an.\n\n'
+      'Dafür fragt Android einmal nach der Freigabe als Geräteadministrator. Hausgeist nutzt davon nur '
+      '„Bildschirm sperren“.';
 
   void _onDisplay() {
     // Display aus: offene Detail-Fenster schließen, damit der Nächste den Raum sieht.
@@ -70,14 +103,34 @@ class _WallAppState extends State<WallApp> {
   }
 
   Future<void> _askSettings() async {
+    await _display.refreshScreen();
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: _nav.currentContext!,
       builder: (ctx) => AlertDialog(
-        title: const Text('Einrichtung öffnen?'),
-        content: const Text('Server und Token dieses Tablets ändern.'),
+        title: const Text('Tablet-Einstellungen'),
+        content: ListenableBuilder(
+          listenable: _display,
+          builder: (ctx, _) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (_display.screenSupported) ...[
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Bildschirm ganz ausschalten'),
+                subtitle: Text(_display.screenAdmin
+                    ? 'Geht aus, wenn lange niemand da ist, und bei Bewegung wieder an. '
+                        'Vor dem Deinstallieren hier ausschalten.'
+                    : 'Sonst wird er nur ganz dunkel. Braucht einmal die Freigabe als Geräteadministrator.'),
+                value: _display.screenAdmin,
+                onChanged: (v) => v ? _display.screen.requestAdmin() : _display.disableScreenOff(),
+              ),
+              const SizedBox(height: 12),
+            ],
+            const Text('Server und Token dieses Tablets ändern:'),
+          ]),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Öffnen')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Schließen')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Einrichtung öffnen')),
         ],
       ),
     );
